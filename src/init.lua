@@ -1,1 +1,1 @@
-return require(script.Runtime).default.new
+return require(script.Runtime).default

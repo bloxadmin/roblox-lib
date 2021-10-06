@@ -147,7 +147,7 @@ function uuid() {
   })[0];
 }
 
-export default class BloxAdmin {
+export class BloxAdmin {
   config: Config;
   private socket: Socket;
   private logger = new Logger("BloxAdmin");
@@ -172,11 +172,13 @@ export default class BloxAdmin {
       },
     };
     this.socket = io<{
+      version: number;
       apiKey: string;
       gameId: string;
       placeId: string;
       serverId: string;
     }>(this.config.api.base, this.config.api.socketio, false, "/roblox", {
+      version: 3,
       apiKey,
       gameId: tostring(game.GameId),
       placeId: tostring(game.PlaceId),
@@ -275,7 +277,7 @@ export default class BloxAdmin {
     if (tags.includes("custom") && tags.includes("player") && this.config.events.disableCustomPlayer) return true;
     if (tags.includes("text") && this.config.events.disableText) return true;
     if (tags.includes("text") && tags.includes("player") && this.config.events.disablePlayerText) return true;
-    if (tags.includes("location") && !this.config.events.disableLocation) return true;
+    if (tags.includes("location") && this.config.events.disableLocation) return true;
     if (tags.includes("location") && tags.includes("player") && this.config.events.disablePlayerlocation) return true;
 
     return false;
@@ -630,4 +632,11 @@ export default class BloxAdmin {
 
     this.socket.send("stats", this.buildEvent(stats));
   }
+}
+
+export default function init(apiKey: string, config: InitConfig = {}) {
+  const g = _G as { _BloxAdmin: BloxAdmin };
+  g._BloxAdmin = g._BloxAdmin || new BloxAdmin(apiKey, config);
+
+  return g._BloxAdmin;
 }
