@@ -1,69 +1,12 @@
-import io, { Socket } from "./Socket";
+import Logger, { LoggerLevel } from "Logger";
+import Transport from "Transport";
 const Players = game.GetService("Players");
 const HttpService = game.GetService("HttpService");
 const LogService = game.GetService("LogService");
 const ScriptContext = game.GetService("ScriptContext");
 const StatsService = game.GetService("Stats");
 
-export enum LoggerLevel {
-  Info,
-  Warning,
-  Error,
-  Debug,
-}
-
-// Logger class with prefix and sub loggers
-export class Logger {
-  private name: string;
-  level: LoggerLevel;
-
-  constructor(name: string, level = LoggerLevel.Debug) {
-    this.name = name;
-    this.level = level;
-  }
-
-  public info(...msgs: string[]) {
-    this.log(LoggerLevel.Info, ...msgs);
-  }
-
-  public warn(...msgs: string[]) {
-    this.log(LoggerLevel.Warning, ...msgs);
-  }
-
-  public error(...msgs: string[]) {
-    this.log(LoggerLevel.Error, ...msgs);
-  }
-
-  public debug(...msgs: string[]) {
-    this.log(LoggerLevel.Debug, ...msgs);
-  }
-
-  public log(level: LoggerLevel, ...msgs: string[]) {
-    let levelName = "";
-    switch (level) {
-      case LoggerLevel.Warning:
-        levelName = "WARN";
-        break;
-      case LoggerLevel.Error:
-        levelName = "ERROR";
-        break;
-      case LoggerLevel.Debug:
-        levelName = "DEBUG";
-        break;
-      default:
-        levelName = "INFO";
-        break;
-    }
-    if (this.level >= level) {
-      const message = msgs.map((msg) => tostring(msg)).join(" ");
-      // print(`[${this.name}] <${levelName}> ${message}`);
-    }
-  }
-
-  public sub(name: string) {
-    return new Logger(`${this.name}/${name}`);
-  }
-}
+const BLOXADMIN_VERSION = 5;
 
 export type AutoIntervalEvents = "stats" | "playerPosition";
 export type AutoPlayerEvents = "playerJoin" | "playerLeave" | "playerChat";
@@ -149,8 +92,8 @@ function uuid() {
 
 export class BloxAdmin {
   config: Config;
-  private socket: Socket;
-  private logger = new Logger("BloxAdmin");
+  private socket: Transport;
+  private logger = new Logger("BloxAdmin", LoggerLevel.None);
   private sessionIds: Record<number, string> = {};
   private apiKey: string;
   private serverId: string;
@@ -171,47 +114,37 @@ export class BloxAdmin {
         ...(config.events || {}),
       },
     };
-    this.socket = io<{
-      version: number;
-      apiKey: string;
-      gameId: string;
-      placeId: string;
-      serverId: string;
-    }>(this.config.api.base, this.config.api.socketio, false, "/roblox", {
-      version: 3,
-      apiKey,
-      gameId: tostring(game.GameId),
-      placeId: tostring(game.PlaceId),
-      serverId: this.serverId,
-    });
+    this.socket = new Transport(BLOXADMIN_VERSION, this.logger, this.config, this.apiKey);
 
     this.open();
   }
 
   private open(): void {
     this.logger.info("Starting");
-    this.socket.on("connect", () => {
-      this.logger.info("Connected to injestor");
-    });
+    // this.socket.on("connect", () => {
+    //   this.logger.info("Connected to injestor");
+    // });
 
-    this.socket.on("disconnect", () => {
-      this.logger.info("Disconnected from injestor");
-    });
+    // this.socket.on("disconnect", () => {
+    //   this.logger.info("Disconnected from injestor");
+    // });
 
-    this.socket.on("error", (err) => {
-      this.logger.error("Api Error:", err);
-    });
+    // this.socket.on("error", (err) => {
+    //   this.logger.error("Api Error:", err);
+    // });
 
     this.defaultEvents();
     this.collect();
 
-    this.socket.open();
+    // this.socket.open();
+    this.socket.flush();
   }
 
   private defaultEvents() {
     game.BindToClose(() => {
       this.sendServerCloseEvent();
-      this.socket.close();
+      // this.socket.close();
+      this.socket.syncFlush();
     });
 
     Players.PlayerAdded.Connect((player) => {
@@ -250,9 +183,9 @@ export class BloxAdmin {
   private buildEvent<D = Record<string, unknown>>(data: D) {
     return {
       eventTime: os.time() * 1000,
-      gameId: tostring(game.GameId),
-      placeId: tostring(game.PlaceId),
-      serverId: this.serverId,
+      // gameId: tostring(game.GameId),
+      // placeId: tostring(game.PlaceId),
+      // serverId: this.serverId,
       ...data,
     };
   }
@@ -298,6 +231,7 @@ export class BloxAdmin {
         placeVersion: game.PlaceVersion,
         privateServerId: game.PrivateServerId,
         privateServerOwnerId: tostring(game.PrivateServerOwnerId),
+        scriptVersion: BLOXADMIN_VERSION,
       }),
     );
   }
@@ -325,6 +259,8 @@ export class BloxAdmin {
    */
   sendConsoleLogEvent(message: string, msgType: Enum.MessageType) {
     if (this.eventDisallowed("consoleLog", ["auto"])) return;
+
+    if (message.sub(0, 11) === "[BloxAdmin]") return;
 
     this.socket.send(
       "consoleLog",

@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "rbxtsc build --type model",
-    "watch": "rbxtsc build --type model --watch"
+    "watch": "rbxtsc build --type model --watch --usePolling"
   },
   "keywords": [],
   "author": "",
