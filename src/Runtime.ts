@@ -6,7 +6,7 @@ const LogService = game.GetService("LogService");
 const ScriptContext = game.GetService("ScriptContext");
 const StatsService = game.GetService("Stats");
 
-const BLOXADMIN_VERSION = 5;
+const BLOXADMIN_VERSION = 6;
 
 export type AutoIntervalEvents = "stats" | "playerPosition";
 export type AutoPlayerEvents = "playerJoin" | "playerLeave" | "playerChat";
@@ -171,7 +171,7 @@ export class BloxAdmin {
 
   private collect() {
     Players.GetPlayers().forEach((player) => {
-      this.sendPlayerPositionEvent(player);
+      // this.sendPlayerPositionEvent(player);
       // this.sendPlayerCursorPositionEvent(player);
     });
 
