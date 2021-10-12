@@ -5,11 +5,20 @@ const HttpService = game.GetService("HttpService");
 const LogService = game.GetService("LogService");
 const ScriptContext = game.GetService("ScriptContext");
 const StatsService = game.GetService("Stats");
+const MarketplaceService = game.GetService("MarketplaceService");
 
-const BLOXADMIN_VERSION = 6;
+const BLOXADMIN_VERSION = 7;
 
 export type AutoIntervalEvents = "stats" | "playerPosition";
-export type AutoPlayerEvents = "playerJoin" | "playerLeave" | "playerChat";
+export type MarketplaceEvents =
+  | "marketplaceBundlePurchaseFinished"
+  | "marketplaceGamePassPurchaseFinished"
+  | "marketplacePremiumPurchaseFinished"
+  | "marketplacePromptPurchaseFinished"
+  | "marketplaceThirdPartyPurchaseFinished"
+  | "marketplaceProductPurchaseFinished"
+  | "processReceipt";
+export type AutoPlayerEvents = MarketplaceEvents | "playerJoin" | "playerLeave" | "playerChat";
 export type AutoEvents =
   | AutoIntervalEvents
   | AutoPlayerEvents
@@ -38,6 +47,7 @@ export interface Config {
     disableText: boolean;
     disablePlayerlocation: boolean;
     disableLocation: boolean;
+    disableMarketplace: boolean;
     disallow: Event[];
   };
 }
@@ -58,6 +68,7 @@ export interface InitConfig {
     disableText?: boolean;
     disablePlayerlocation?: boolean;
     disableLocation?: boolean;
+    disableMarketplace: boolean;
     disallow?: Event[];
   };
 }
@@ -78,6 +89,7 @@ export const defaultConfig: Config = {
     disableText: false,
     disablePlayerlocation: false,
     disableLocation: false,
+    disableMarketplace: false,
     disallow: [],
   },
 };
@@ -166,6 +178,46 @@ export class BloxAdmin {
       this.sendScriptErrorEvent(message, trace, sk);
     });
 
+    MarketplaceService.PromptBundlePurchaseFinished.Connect((player, bundleId, wasPurchased) => {
+      this.sendMarketplaceBundlePurchaseFinishedEvent(player, bundleId, wasPurchased);
+    });
+
+    MarketplaceService.PromptGamePassPurchaseFinished.Connect((player, gamePassId, wasPurchased) => {
+      this.sendMarketplaceGamePassPurchaseFinishedEvent(player, gamePassId, wasPurchased);
+    });
+
+    MarketplaceService.PromptPremiumPurchaseFinished.Connect(((...args: unknown[]) => {
+      print("premium");
+      print(args);
+      // this.sendMarketplacePremiumPurchaseFinishedEvent(player);
+    }) as unknown as () => void);
+
+    MarketplaceService.PromptPurchaseFinished.Connect((player, assetId, wasPurchased) => {
+      this.sendMarketplacePromptPurchaseFinishedEvent(player, assetId, wasPurchased);
+    });
+
+    try {
+      // eslint-disable-next-line roblox-ts/no-any
+      (MarketplaceService as unknown as any).PromptProductPurchaseFinished.Connect(
+        (player: Player, productId: number, wasPurchased: boolean) => {
+          this.sendMarketplaceProductPurchaseFinishedEvent(player, productId, wasPurchased);
+        },
+      );
+    } catch (e) {
+      // Ignored
+    }
+
+    try {
+      // eslint-disable-next-line roblox-ts/no-any
+      (MarketplaceService as unknown as any).ThirdPartyPurchaseFinished.Connect(
+        (player: Player, productId: number, receipt: string, wasPurchased: boolean) => {
+          this.sendMarketplaceThirdPartyPurchaseFinishedEvent(player, productId, receipt, wasPurchased);
+        },
+      );
+    } catch (e) {
+      // Ignored
+    }
+
     this.sendServerOpenEvent();
   }
 
@@ -199,19 +251,29 @@ export class BloxAdmin {
     });
   }
 
-  private eventDisallowed(event: Event, tags: ("intervals" | "player" | "auto" | "custom" | "text" | "location")[]) {
+  private eventDisallowed(
+    event: Event,
+    tags: ("intervals" | "player" | "auto" | "custom" | "text" | "location" | "marketplace")[],
+  ) {
     if (this.config.events.disallow.includes(event)) return true;
+
     if (tags.includes("intervals") && this.config.events.disableIntervals) return true;
     if (tags.includes("player") && this.config.events.disablePlayer) return true;
     if (tags.includes("auto") && this.config.events.disableAuto) return true;
     if (tags.includes("custom") && this.config.events.disableCustom) return true;
+
     if (tags.includes("auto") && tags.includes("player") && this.config.events.disableAutoPlayer) return true;
+
     if (tags.includes("custom") && tags.includes("player") && this.config.events.disableCustomPlayer) return true;
     if (tags.includes("custom") && tags.includes("player") && this.config.events.disableCustomPlayer) return true;
+
     if (tags.includes("text") && this.config.events.disableText) return true;
     if (tags.includes("text") && tags.includes("player") && this.config.events.disablePlayerText) return true;
+
     if (tags.includes("location") && this.config.events.disableLocation) return true;
     if (tags.includes("location") && tags.includes("player") && this.config.events.disablePlayerlocation) return true;
+
+    if (tags.includes("marketplace") && this.config.events.disableMarketplace) return true;
 
     return false;
   }
@@ -514,6 +576,114 @@ export class BloxAdmin {
         meta,
       }),
     );
+  }
+
+  sendMarketplaceBundlePurchaseFinishedEvent(player: Player, bundleId: number, wasPurchased: boolean) {
+    if (this.eventDisallowed("marketplaceBundlePurchaseFinished", ["player", "marketplace"])) return;
+
+    this.socket.send(
+      "marketplaceBundlePurchaseFinished",
+      this.buildPlayerEvent(player, {
+        bundleId,
+        wasPurchased,
+      }),
+    );
+  }
+
+  sendMarketplaceGamePassPurchaseFinishedEvent(player: Player, gamePassId: number, wasPurchased: boolean) {
+    if (this.eventDisallowed("marketplaceGamePassPurchaseFinished", ["player", "marketplace"])) return;
+
+    this.socket.send(
+      "marketplaceGamePassPurchaseFinished",
+      this.buildPlayerEvent(player, {
+        gamePassId,
+        wasPurchased,
+      }),
+    );
+  }
+
+  sendMarketplacePremiumPurchaseFinishedEvent(player: Player, wasPurchased: boolean) {
+    if (this.eventDisallowed("marketplacePremiumPurchaseFinished", ["player", "marketplace"])) return;
+
+    this.socket.send(
+      "marketplacePremiumPurchaseFinished",
+      this.buildPlayerEvent(player, {
+        wasPurchased,
+      }),
+    );
+  }
+
+  sendMarketplacePromptPurchaseFinishedEvent(player: Player, assetId: number, wasPurchased: boolean) {
+    if (this.eventDisallowed("marketplacePromptPurchaseFinished", ["player", "marketplace"])) return;
+
+    this.socket.send(
+      "marketplacePromptPurchaseFinished",
+      this.buildPlayerEvent(player, {
+        assetId,
+        wasPurchased,
+      }),
+    );
+  }
+
+  sendMarketplaceThirdPartyPurchaseFinishedEvent(
+    player: Player,
+    productId: number,
+    receipt: string,
+    wasPurchased: boolean,
+  ) {
+    if (this.eventDisallowed("marketplaceThirdPartyPurchaseFinished", ["player", "marketplace"])) return;
+
+    this.socket.send(
+      "marketplaceThirdPartyPurchaseFinished",
+      this.buildPlayerEvent(player, {
+        productId,
+        receipt,
+        wasPurchased,
+      }),
+    );
+  }
+
+  sendMarketplaceProductPurchaseFinishedEvent(player: Player, productId: number, wasPurchased: boolean) {
+    if (this.eventDisallowed("marketplaceProductPurchaseFinished", ["player", "marketplace"])) return;
+
+    this.socket.send(
+      "marketplaceProductPurchaseFinished",
+      this.buildPlayerEvent(player, {
+        productId,
+        wasPurchased,
+      }),
+    );
+  }
+
+  sendProcessReceiptEvent(receiptInfo: ReceiptInfo) {
+    // Function requires extra protection as it could break people's games
+    try {
+      if (this.eventDisallowed("processReceipt", ["marketplace"])) return;
+
+      this.socket.send(
+        "marketplaceProcessReceipt",
+        this.buildEvent({
+          playerId: receiptInfo.PlayerId,
+          sessionId: this.sessionIds[receiptInfo.PlayerId] || undefined,
+          productId: receiptInfo.ProductId,
+          amount: receiptInfo.CurrencySpent,
+          placeIdWherePurchased: receiptInfo.PlaceIdWherePurchased,
+        }),
+      );
+    } catch (e) {
+      warn(`BA CRIT: Error sending processReceipt event: ${e}`);
+    }
+  }
+
+  sendEconomyEvent(
+    sender: number,
+    recipient: number,
+    currency: string,
+    amount: number,
+    item: string,
+    meta: Record<string, unknown> = {},
+  ) {
+    // TODO: implement
   }
 
   /**
