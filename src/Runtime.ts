@@ -7,7 +7,7 @@ const ScriptContext = game.GetService("ScriptContext");
 const StatsService = game.GetService("Stats");
 const MarketplaceService = game.GetService("MarketplaceService");
 
-const BLOXADMIN_VERSION = 7;
+const BLOXADMIN_VERSION = 8;
 
 export type AutoIntervalEvents = "stats" | "playerPosition";
 export type MarketplaceEvents =
@@ -152,6 +152,15 @@ export class BloxAdmin {
     this.socket.flush();
   }
 
+  private setupPlayer(player: Player) {
+    this.sessionIds[player.UserId] = HttpService.GenerateGUID(false);
+    this.sendPlayerJoinEvent(player);
+
+    player.Chatted.Connect((message, recipient) => {
+      this.sendPlayerChatEvent(player, message, recipient);
+    });
+  }
+
   private defaultEvents() {
     game.BindToClose(() => {
       this.sendServerCloseEvent();
@@ -160,12 +169,11 @@ export class BloxAdmin {
     });
 
     Players.PlayerAdded.Connect((player) => {
-      this.sessionIds[player.UserId] = HttpService.GenerateGUID(false);
-      this.sendPlayerJoinEvent(player);
+      this.setupPlayer(player);
+    });
 
-      player.Chatted.Connect((message, recipient) => {
-        this.sendPlayerChatEvent(player, message, recipient);
-      });
+    Players.GetChildren().forEach((player) => {
+      this.setupPlayer(player as Player);
     });
 
     Players.PlayerRemoving.Connect((player) => this.sendPlayerLeaveEvent(player));
