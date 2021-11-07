@@ -1,54 +1,45 @@
-export enum LoggerLevel {
-  None,
-  Info,
-  Warning,
-  Error,
-  Debug,
-}
-
-// Logger class with prefix and sub loggers
 export default class Logger {
   private name: string;
-  level: LoggerLevel;
+  level: Enum.AnalyticsLogLevel;
 
-  constructor(name: string, level = LoggerLevel.None) {
+  constructor(name: string, level: Enum.AnalyticsLogLevel = Enum.AnalyticsLogLevel.Warning) {
     this.name = name;
     this.level = level;
   }
 
   public info(...msgs: string[]) {
-    this.log(LoggerLevel.Info, ...msgs);
+    this.log(Enum.AnalyticsLogLevel.Information, ...msgs);
   }
 
   public warn(...msgs: string[]) {
-    this.log(LoggerLevel.Warning, ...msgs);
+    this.log(Enum.AnalyticsLogLevel.Warning, ...msgs);
   }
 
   public error(...msgs: string[]) {
-    this.log(LoggerLevel.Error, ...msgs);
+    this.log(Enum.AnalyticsLogLevel.Error, ...msgs);
   }
 
   public debug(...msgs: string[]) {
-    this.log(LoggerLevel.Debug, ...msgs);
+    this.log(Enum.AnalyticsLogLevel.Debug, ...msgs);
   }
 
-  public log(level: LoggerLevel, ...msgs: string[]) {
+  public log(level: Enum.AnalyticsLogLevel, ...msgs: string[]) {
     let levelName = "";
     switch (level) {
-      case LoggerLevel.Warning:
+      case Enum.AnalyticsLogLevel.Warning:
         levelName = "WARN";
         break;
-      case LoggerLevel.Error:
+      case Enum.AnalyticsLogLevel.Error:
         levelName = "ERROR";
         break;
-      case LoggerLevel.Debug:
+      case Enum.AnalyticsLogLevel.Debug:
         levelName = "DEBUG";
         break;
       default:
         levelName = "INFO";
         break;
     }
-    if (this.level >= level) {
+    if (this.level.Value >= level.Value) {
       const message = msgs.map((msg) => tostring(msg)).join(" ");
       print(`[${this.name}] <${levelName}> ${message}`);
     }

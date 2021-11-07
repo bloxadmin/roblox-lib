@@ -1,159 +1,40 @@
-import Logger, { LoggerLevel } from "Logger";
-import Transport from "Transport";
+import { BloxAdmin } from "BloxAdmin";
+import { BLOXADMIN_VERSION, DEFAULT_CONFIG } from "consts";
+import { Module } from "Module";
+import { Event } from "types";
+
 const Players = game.GetService("Players");
-const HttpService = game.GetService("HttpService");
 const LogService = game.GetService("LogService");
 const ScriptContext = game.GetService("ScriptContext");
 const StatsService = game.GetService("Stats");
 const MarketplaceService = game.GetService("MarketplaceService");
 
-const BLOXADMIN_VERSION = 8;
-
-export type AutoIntervalEvents = "stats" | "playerPosition";
-export type MarketplaceEvents =
-  | "marketplaceBundlePurchaseFinished"
-  | "marketplaceGamePassPurchaseFinished"
-  | "marketplacePremiumPurchaseFinished"
-  | "marketplacePromptPurchaseFinished"
-  | "marketplaceThirdPartyPurchaseFinished"
-  | "marketplaceProductPurchaseFinished"
-  | "processReceipt";
-export type AutoPlayerEvents = MarketplaceEvents | "playerJoin" | "playerLeave" | "playerChat";
-export type AutoEvents =
-  | AutoIntervalEvents
-  | AutoPlayerEvents
-  | "serverOpen"
-  | "serverClose"
-  | "consoleLog"
-  | "scriptError"
-  | "stats";
-export type CustomPlayerEvents = "playerTextInput" | "playerTrigger" | "playerLocationTrigger";
-export type CustomEvents = CustomPlayerEvents | "trigger" | "locationTrigger";
-export type Event = AutoEvents | CustomEvents;
-
-export interface Config {
-  api: {
-    base: string;
-    socketio: string;
-  };
-  events: {
-    disableIntervals: boolean;
-    disablePlayer: boolean;
-    disableAuto: boolean;
-    disableAutoPlayer: boolean;
-    disableCustomPlayer: boolean;
-    disableCustom: boolean;
-    disablePlayerText: boolean;
-    disableText: boolean;
-    disablePlayerlocation: boolean;
-    disableLocation: boolean;
-    disableMarketplace: boolean;
-    disallow: Event[];
-  };
-}
-
-export interface InitConfig {
-  api?: {
-    base?: string;
-    socketio?: string;
-  };
-  events?: {
-    disableIntervals?: boolean;
-    disablePlayer?: boolean;
-    disableAuto?: boolean;
-    disableAutoPlayer?: boolean;
-    disableCustomPlayer?: boolean;
-    disableCustom?: boolean;
-    disablePlayerText?: boolean;
-    disableText?: boolean;
-    disablePlayerlocation?: boolean;
-    disableLocation?: boolean;
-    disableMarketplace: boolean;
-    disallow?: Event[];
-  };
-}
-
-export const defaultConfig: Config = {
-  api: {
-    base: "https://injest.bloxadmin.com/",
-    socketio: "/socket.io",
-  },
-  events: {
-    disableIntervals: false,
-    disablePlayer: false,
-    disableAuto: false,
-    disableAutoPlayer: false,
-    disableCustomPlayer: false,
-    disableCustom: false,
-    disablePlayerText: false,
-    disableText: false,
-    disablePlayerlocation: false,
-    disableLocation: false,
-    disableMarketplace: false,
-    disallow: [],
-  },
-};
-
-function uuid() {
-  const template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx";
-  return string.gsub(template, "[xy]", (c) => {
-    const v = (c === "x" && math.random(8, 0xf)) || math.random(8, 0xb);
-    return string.format("%x", v);
-  })[0];
-}
-
-export class BloxAdmin {
-  config: Config;
-  private socket: Transport;
-  private logger = new Logger("BloxAdmin", LoggerLevel.None);
-  private sessionIds: Record<number, string> = {};
-  private apiKey: string;
-  private serverId: string;
-
-  constructor(apiKey: string, config: InitConfig = {}) {
-    if (!apiKey) error("[BloxAdmin] <ERROR> Missing API Key");
-
-    this.serverId = game.JobId || uuid();
-
-    this.apiKey = apiKey;
-    this.config = {
-      api: {
-        ...defaultConfig.api,
-        ...(config.api || {}),
-      },
-      events: {
-        ...defaultConfig.events,
-        ...(config.events || {}),
-      },
-    };
-    this.socket = new Transport(BLOXADMIN_VERSION, this.logger, this.config, this.apiKey);
-
-    this.open();
+export default class Analytics extends Module {
+  constructor(admin: BloxAdmin) {
+    super("Analytics", admin);
   }
 
-  private open(): void {
-    this.logger.info("Starting");
-    // this.socket.on("connect", () => {
+  enable(): void {
+    // this.admin.socket.on("connect", () => {
     //   this.logger.info("Connected to injestor");
     // });
 
-    // this.socket.on("disconnect", () => {
+    // this.admin.socket.on("disconnect", () => {
     //   this.logger.info("Disconnected from injestor");
     // });
 
-    // this.socket.on("error", (err) => {
+    // this.admin.socket.on("error", (err) => {
     //   this.logger.error("Api Error:", err);
     // });
 
     this.defaultEvents();
-    this.collect();
-
-    // this.socket.open();
-    this.socket.flush();
+    if (this.admin.config.intervals.stats) this.statsInterval();
+    if (this.admin.config.intervals.playerPositions) this.playerPositionInterval();
+    if (this.admin.config.intervals.playerCursors) this.playerCursorInterval();
+    this.heartbeatInterval();
   }
 
   private setupPlayer(player: Player) {
-    this.sessionIds[player.UserId] = HttpService.GenerateGUID(false);
     this.sendPlayerJoinEvent(player);
 
     player.Chatted.Connect((message, recipient) => {
@@ -164,8 +45,8 @@ export class BloxAdmin {
   private defaultEvents() {
     game.BindToClose(() => {
       this.sendServerCloseEvent();
-      // this.socket.close();
-      this.socket.syncFlush();
+      // this.admin.socket.close();
+      this.admin.socket.syncFlush();
     });
 
     Players.PlayerAdded.Connect((player) => {
@@ -195,8 +76,6 @@ export class BloxAdmin {
     });
 
     MarketplaceService.PromptPremiumPurchaseFinished.Connect(((...args: unknown[]) => {
-      print("premium");
-      print(args);
       // this.sendMarketplacePremiumPurchaseFinishedEvent(player);
     }) as unknown as () => void);
 
@@ -229,20 +108,40 @@ export class BloxAdmin {
     this.sendServerOpenEvent();
   }
 
-  private collect() {
+  private statsInterval() {
+    this.sendStatsEvent();
+
+    delay(this.admin.config.intervals.stats, () => this.statsInterval());
+  }
+
+  private playerPositionInterval() {
     Players.GetPlayers().forEach((player) => {
-      // this.sendPlayerPositionEvent(player);
+      this.sendPlayerPositionEvent(player);
+    });
+
+    delay(this.admin.config.intervals.playerPositions, () => this.playerPositionInterval());
+  }
+
+  private playerCursorInterval() {
+    Players.GetPlayers().forEach((player) => {
       // this.sendPlayerCursorPositionEvent(player);
     });
 
-    this.sendStatsEvent();
+    delay(this.admin.config.intervals.playerCursors, () => this.playerCursorInterval());
+  }
 
-    delay(5, () => this.collect());
+  private heartbeatInterval() {
+    this.sendHeartbeat();
+
+    // This event must be allowed, so 0 interval will be changed to the default
+    // as to not be sending it 34.48 times a second
+    delay(this.admin.config.intervals.heartbeat || DEFAULT_CONFIG.intervals.heartbeat, () => this.heartbeatInterval());
   }
 
   private buildEvent<D = Record<string, unknown>>(data: D) {
     return {
       eventTime: os.time() * 1000,
+      // These were removed as the new injest system has them included into the URL
       // gameId: tostring(game.GameId),
       // placeId: tostring(game.PlaceId),
       // serverId: this.serverId,
@@ -254,7 +153,7 @@ export class BloxAdmin {
     return this.buildEvent({
       playerId: player.UserId,
       playerName: player.Name,
-      sessionId: this.sessionIds[player.UserId],
+      sessionId: this.admin.getPlayerSessionId(player.UserId),
       ...data,
     });
   }
@@ -263,27 +162,47 @@ export class BloxAdmin {
     event: Event,
     tags: ("intervals" | "player" | "auto" | "custom" | "text" | "location" | "marketplace")[],
   ) {
-    if (this.config.events.disallow.includes(event)) return true;
+    if (this.admin.config.events.disallow.includes(event)) return true;
 
-    if (tags.includes("intervals") && this.config.events.disableIntervals) return true;
-    if (tags.includes("player") && this.config.events.disablePlayer) return true;
-    if (tags.includes("auto") && this.config.events.disableAuto) return true;
-    if (tags.includes("custom") && this.config.events.disableCustom) return true;
+    if (tags.includes("intervals") && this.admin.config.events.disableIntervals) return true;
+    if (tags.includes("player") && this.admin.config.events.disablePlayer) return true;
+    if (tags.includes("auto") && this.admin.config.events.disableAuto) return true;
+    if (tags.includes("custom") && this.admin.config.events.disableCustom) return true;
 
-    if (tags.includes("auto") && tags.includes("player") && this.config.events.disableAutoPlayer) return true;
+    if (tags.includes("auto") && tags.includes("player") && this.admin.config.events.disableAutoPlayer) return true;
 
-    if (tags.includes("custom") && tags.includes("player") && this.config.events.disableCustomPlayer) return true;
-    if (tags.includes("custom") && tags.includes("player") && this.config.events.disableCustomPlayer) return true;
+    if (tags.includes("custom") && tags.includes("player") && this.admin.config.events.disableCustomPlayer) return true;
+    if (tags.includes("custom") && tags.includes("player") && this.admin.config.events.disableCustomPlayer) return true;
 
-    if (tags.includes("text") && this.config.events.disableText) return true;
-    if (tags.includes("text") && tags.includes("player") && this.config.events.disablePlayerText) return true;
+    if (tags.includes("text") && this.admin.config.events.disableText) return true;
+    if (tags.includes("text") && tags.includes("player") && this.admin.config.events.disablePlayerText) return true;
 
-    if (tags.includes("location") && this.config.events.disableLocation) return true;
-    if (tags.includes("location") && tags.includes("player") && this.config.events.disablePlayerlocation) return true;
+    if (tags.includes("location") && this.admin.config.events.disableLocation) return true;
+    if (tags.includes("location") && tags.includes("player") && this.admin.config.events.disablePlayerlocation)
+      return true;
 
-    if (tags.includes("marketplace") && this.config.events.disableMarketplace) return true;
+    if (tags.includes("marketplace") && this.admin.config.events.disableMarketplace) return true;
 
     return false;
+  }
+
+  /**
+   * Called every so often to tell the injestor the server is still alive
+   * also contains some info to make sure the injestor has the most up to
+   * date information
+   *
+   * Is called automatically and should not be called directly.
+   *
+   * @tags []
+   */
+  private sendHeartbeat() {
+    // This event must be allowed
+    this.admin.socket.send(
+      "heartbeat",
+      this.buildEvent({
+        players: (Players.GetChildren() as Player[]).map((p) => p.UserId),
+      }),
+    );
   }
 
   /**
@@ -295,7 +214,7 @@ export class BloxAdmin {
    */
   private sendServerOpenEvent() {
     // This event must be allowed
-    this.socket.send(
+    this.admin.socket.send(
       "serverOpen",
       this.buildEvent({
         placeVersion: game.PlaceVersion,
@@ -315,7 +234,7 @@ export class BloxAdmin {
    */
   private sendServerCloseEvent() {
     // This event must be allowed
-    this.socket.send("serverClose", this.buildEvent({}));
+    this.admin.socket.send("serverClose", this.buildEvent({}));
   }
 
   /**
@@ -330,9 +249,9 @@ export class BloxAdmin {
   sendConsoleLogEvent(message: string, msgType: Enum.MessageType) {
     if (this.eventDisallowed("consoleLog", ["auto"])) return;
 
-    if (message.sub(0, 11) === "[BloxAdmin]") return;
+    if (message.sub(0, 10) === "[BloxAdmin") return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "consoleLog",
       this.buildEvent({
         message: message,
@@ -354,7 +273,7 @@ export class BloxAdmin {
   sendScriptErrorEvent(message: string, trace: string, sk: LuaSourceContainer | undefined) {
     if (this.eventDisallowed("scriptError", ["auto"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "scriptError",
       this.buildEvent({
         message,
@@ -377,7 +296,7 @@ export class BloxAdmin {
 
     const joinData = player.GetJoinData();
 
-    this.socket.send(
+    this.admin.socket.send(
       "playerJoin",
       this.buildPlayerEvent(player, {
         sourceGameId: joinData.SourceGameId !== undefined ? tostring(joinData.SourceGameId) : undefined,
@@ -399,7 +318,7 @@ export class BloxAdmin {
   sendPlayerLeaveEvent(player: Player) {
     if (this.eventDisallowed("playerLeave", ["auto", "player"])) return;
 
-    this.socket.send("playerLeave", this.buildPlayerEvent(player, { followPlayerId: 0 }));
+    this.admin.socket.send("playerLeave", this.buildPlayerEvent(player, { followPlayerId: 0 }));
   }
 
   /**
@@ -421,7 +340,7 @@ export class BloxAdmin {
     const position = part.Position;
     const orientation = part.Orientation;
 
-    this.socket.send(
+    this.admin.socket.send(
       "playerPosition",
       this.buildPlayerEvent(player, {
         x: position.X,
@@ -445,7 +364,7 @@ export class BloxAdmin {
   sendPlayerChatEvent(player: Player, message: string, recipient?: Player) {
     if (this.eventDisallowed("playerChat", ["auto", "player", "text"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "playerChat",
       this.buildPlayerEvent(player, {
         message,
@@ -476,7 +395,7 @@ export class BloxAdmin {
   sendPlayerTextInputEvent(player: Player, tag: string, text: string, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("playerTextInput", ["custom", "player", "text"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "playerTextInput",
       this.buildPlayerEvent(player, {
         tag,
@@ -501,7 +420,7 @@ export class BloxAdmin {
   sendPlayerTriggerEvent(player: Player, tag: string, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("playerTrigger", ["custom", "player"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "playerTrigger",
       this.buildPlayerEvent(player, {
         tag,
@@ -523,7 +442,7 @@ export class BloxAdmin {
   sendTriggerEvent(tag: string, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("trigger", ["custom", "player"])) return;
 
-    this.socket.send("trigger", this.buildEvent({ tag, meta }));
+    this.admin.socket.send("trigger", this.buildEvent({ tag, meta }));
   }
 
   /**
@@ -541,7 +460,7 @@ export class BloxAdmin {
   sendLocationTrigger(tag: string, location: Vector3, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("locationTrigger", ["custom", "location"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "locationTrigger",
       this.buildEvent({
         tag,
@@ -574,7 +493,7 @@ export class BloxAdmin {
 
     if (!location) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "playerLocationTrigger",
       this.buildPlayerEvent(player, {
         tag,
@@ -589,7 +508,7 @@ export class BloxAdmin {
   sendMarketplaceBundlePurchaseFinishedEvent(player: Player, bundleId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplaceBundlePurchaseFinished", ["player", "marketplace"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "marketplaceBundlePurchaseFinished",
       this.buildPlayerEvent(player, {
         bundleId,
@@ -601,7 +520,7 @@ export class BloxAdmin {
   sendMarketplaceGamePassPurchaseFinishedEvent(player: Player, gamePassId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplaceGamePassPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "marketplaceGamePassPurchaseFinished",
       this.buildPlayerEvent(player, {
         gamePassId,
@@ -613,7 +532,7 @@ export class BloxAdmin {
   sendMarketplacePremiumPurchaseFinishedEvent(player: Player, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplacePremiumPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "marketplacePremiumPurchaseFinished",
       this.buildPlayerEvent(player, {
         wasPurchased,
@@ -624,7 +543,7 @@ export class BloxAdmin {
   sendMarketplacePromptPurchaseFinishedEvent(player: Player, assetId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplacePromptPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "marketplacePromptPurchaseFinished",
       this.buildPlayerEvent(player, {
         assetId,
@@ -641,7 +560,7 @@ export class BloxAdmin {
   ) {
     if (this.eventDisallowed("marketplaceThirdPartyPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "marketplaceThirdPartyPurchaseFinished",
       this.buildPlayerEvent(player, {
         productId,
@@ -654,7 +573,7 @@ export class BloxAdmin {
   sendMarketplaceProductPurchaseFinishedEvent(player: Player, productId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplaceProductPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.socket.send(
+    this.admin.socket.send(
       "marketplaceProductPurchaseFinished",
       this.buildPlayerEvent(player, {
         productId,
@@ -668,18 +587,18 @@ export class BloxAdmin {
     try {
       if (this.eventDisallowed("processReceipt", ["marketplace"])) return;
 
-      this.socket.send(
+      this.admin.socket.send(
         "marketplaceProcessReceipt",
         this.buildEvent({
           playerId: receiptInfo.PlayerId,
-          sessionId: this.sessionIds[receiptInfo.PlayerId] || undefined,
+          sessionId: this.admin.getPlayerSessionId(receiptInfo.PlayerId, false) || undefined,
           productId: receiptInfo.ProductId,
           amount: receiptInfo.CurrencySpent,
           placeIdWherePurchased: receiptInfo.PlaceIdWherePurchased,
         }),
       );
     } catch (e) {
-      warn(`BA CRIT: Error sending processReceipt event: ${e}`);
+      this.logger.warn(`CRIT: Error sending processReceipt event: ${e}`);
     }
   }
 
@@ -744,13 +663,6 @@ export class BloxAdmin {
       terrainVoxelsMemoryUsageMb: StatsService.GetMemoryUsageMbForTag("TerrainVoxels"),
     };
 
-    this.socket.send("stats", this.buildEvent(stats));
+    this.admin.socket.send("stats", this.buildEvent(stats));
   }
-}
-
-export default function init(apiKey: string, config: InitConfig = {}) {
-  const g = _G as { _BloxAdmin: BloxAdmin };
-  g._BloxAdmin = g._BloxAdmin || new BloxAdmin(apiKey, config);
-
-  return g._BloxAdmin;
 }

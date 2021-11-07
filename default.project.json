@@ -10,6 +10,12 @@
 			"$className": "Workspace",
 			"$properties": {
 				"FilteringEnabled": true
+			}
+		},
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"$properties": {
+				"FilteringEnabled": true
 			},
 			"MainModule": {
 				"$path": "out",

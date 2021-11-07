@@ -1,5 +1,5 @@
 import Logger from "Logger";
-import { Config } from "Runtime";
+import { Config } from "types";
 const HttpService = game.GetService("HttpService");
 
 function uuid() {
