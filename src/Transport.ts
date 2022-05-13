@@ -24,11 +24,15 @@ export default class Transport {
   private writeBuffer: Event[] = [];
   private closed = false;
   private version: number;
+  private interval: number;
+  private retryInterval: number;
 
   constructor(version: number, logger: Logger, config: Config, apiKey: string) {
     this.logger = logger;
     this.apiKey = apiKey;
     this.version = version;
+    this.interval = config.intervals.ingest;
+    this.retryInterval = config.intervals.ingestRetry;
 
     const uri = config.api.base;
 
@@ -45,7 +49,9 @@ export default class Transport {
 
     const serverId = game.JobId || uuid();
 
-    this.path = `/${game.GameId}/${game.PlaceId}/${serverId}`;
+    this.path = `/ingest?gid=${game.GameId}&pid=${game.PlaceId}&sid=${serverId}`;
+
+    this.logger.debug("Transport initialized");
   }
 
   url() {
@@ -69,6 +75,9 @@ export default class Transport {
 
     const data = HttpService.JSONEncode(events);
 
+    this.logger.debug(`Sending ${events.size()} events`);
+    this.logger.verbose(`Data: ${data}`);
+
     const [success, resOrErr] = pcall(() =>
       HttpService.RequestAsync({
         Method: "POST",
@@ -89,16 +98,20 @@ export default class Transport {
     const res = resOrErr as RequestAsyncResponse;
 
     const fail = !success || !res.Success || res.StatusCode >= 400;
-    const sendIn = fail ? 5 : 1;
+    const sendIn = fail ? this.interval : this.retryInterval;
 
     if (fail) {
-      this.logger.warn((success && res.Body) || "Failed to send events");
+      this.logger.warn("Failed to send events");
+      if (success && res.Body) this.logger.verbose(`Response: ${res.Body}`);
       events.forEach((event) => this.writeBuffer.push(event));
+    } else {
+      this.logger.debug(`Res ${res.StatusCode}:`);
+      this.logger.verbose(`Data: ${tostring(res.Body)}`);
     }
 
     if (!success)
       if (res.StatusCode === 401 || res.StatusCode === 403) {
-        this.logger.error("API key is invalid");
+        this.logger.fatal("API key is invalid");
         this.closed = true;
         return 3600;
       }

@@ -51,7 +51,7 @@ export class BloxAdmin extends EventEmitter {
     this.logger.debug("Starting");
     this.sessionIds = {};
     this.modules = {};
-    this.socket = new Transport(BLOXADMIN_VERSION, this.logger, this.config, this.apiKey);
+    this.socket = new Transport(BLOXADMIN_VERSION, this.logger.sub("Transport"), this.config, this.apiKey);
 
     if (RunService.IsStudio() && !this.config.api.DEBUGGING_ONLY_runInStudio) {
       this.logger.warn("Not starting BloxAdmin because in studio");
@@ -97,111 +97,6 @@ export class BloxAdmin extends EventEmitter {
     if (!this.sessionIds[playerId]) this.sessionIds[playerId] = uuid();
 
     return this.sessionIds[playerId];
-  }
-
-  // DEPRECATED
-  private warnDeperatedAnalyticsMethod(name: string) {
-    this.logger.warn(
-      debug.traceback(
-        `The method "BloxAdmin:${name}(...)" called from ` +
-          `BloxAdmin has been deprecated and will be removed in a future version of ` +
-          `the script. Use "BloxAdmin:getAnalytics():${name}(...)" instead.`,
-        2,
-      ),
-    );
-    this.getAnalytics().sendScriptErrorEvent(`[BloxAdmin] Deperated method used: ${name}`, debug.traceback(), script);
-  }
-  sendConsoleLogEvent(message: string, msgType: Enum.MessageType) {
-    this.warnDeperatedAnalyticsMethod("sendConsoleLogEvent");
-    this.getAnalytics().sendConsoleLogEvent(message, msgType);
-  }
-  sendScriptErrorEvent(message: string, trace: string, sk: LuaSourceContainer | undefined) {
-    this.warnDeperatedAnalyticsMethod("sendScriptErrorEvent");
-    this.getAnalytics().sendScriptErrorEvent(message, trace, sk);
-  }
-  sendPlayerJoinEvent(player: Player) {
-    this.warnDeperatedAnalyticsMethod("sendPlayerJoinEvent");
-    this.getAnalytics().sendPlayerJoinEvent(player);
-  }
-  sendPlayerLeaveEvent(player: Player) {
-    this.warnDeperatedAnalyticsMethod("sendPlayerLeaveEvent");
-    this.getAnalytics().sendPlayerLeaveEvent(player);
-  }
-  sendPlayerPositionEvent(player: Player) {
-    this.warnDeperatedAnalyticsMethod("sendPlayerPositionEvent");
-    this.getAnalytics().sendPlayerPositionEvent(player);
-  }
-  sendPlayerChatEvent(player: Player, message: string, recipient?: Player) {
-    this.warnDeperatedAnalyticsMethod("sendPlayerChatEvent");
-    this.getAnalytics().sendPlayerChatEvent(player, message, recipient);
-  }
-  sendPlayerTextInputEvent(player: Player, tag: string, text: string, meta: Record<string, unknown> = {}) {
-    this.warnDeperatedAnalyticsMethod("sendPlayerTextInputEvent");
-    this.getAnalytics().sendPlayerTextInputEvent(player, tag, text, meta);
-  }
-  sendPlayerTriggerEvent(player: Player, tag: string, meta: Record<string, unknown> = {}) {
-    this.warnDeperatedAnalyticsMethod("sendPlayerTriggerEvent");
-    this.getAnalytics().sendPlayerTriggerEvent(player, tag, meta);
-  }
-  sendTriggerEvent(tag: string, meta: Record<string, unknown> = {}) {
-    this.warnDeperatedAnalyticsMethod("sendTriggerEvent");
-    this.getAnalytics().sendTriggerEvent(tag, meta);
-  }
-  sendLocationTrigger(tag: string, location: Vector3, meta: Record<string, unknown> = {}) {
-    this.warnDeperatedAnalyticsMethod("sendLocationTrigger");
-    this.getAnalytics().sendLocationTrigger(tag, location, meta);
-  }
-  sendPlayerLocationTrigger(tag: string, player: Player, location?: Vector3, meta: Record<string, unknown> = {}) {
-    this.warnDeperatedAnalyticsMethod("sendPlayerLocationTrigger");
-    this.getAnalytics().sendPlayerLocationTrigger(tag, player, location, meta);
-  }
-  sendMarketplaceBundlePurchaseFinishedEvent(player: Player, bundleId: number, wasPurchased: boolean) {
-    this.warnDeperatedAnalyticsMethod("sendMarketplaceBundlePurchaseFinishedEvent");
-    this.getAnalytics().sendMarketplaceBundlePurchaseFinishedEvent(player, bundleId, wasPurchased);
-  }
-  sendMarketplaceGamePassPurchaseFinishedEvent(player: Player, gamePassId: number, wasPurchased: boolean) {
-    this.warnDeperatedAnalyticsMethod("sendMarketplaceGamePassPurchaseFinishedEvent");
-    this.getAnalytics().sendMarketplaceGamePassPurchaseFinishedEvent(player, gamePassId, wasPurchased);
-  }
-  sendMarketplacePremiumPurchaseFinishedEvent(player: Player, wasPurchased: boolean) {
-    this.warnDeperatedAnalyticsMethod("sendMarketplacePremiumPurchaseFinishedEvent");
-    this.getAnalytics().sendMarketplacePremiumPurchaseFinishedEvent(player, wasPurchased);
-  }
-  sendMarketplacePromptPurchaseFinishedEvent(player: Player, assetId: number, wasPurchased: boolean) {
-    this.warnDeperatedAnalyticsMethod("sendMarketplacePromptPurchaseFinishedEvent");
-    this.getAnalytics().sendMarketplacePromptPurchaseFinishedEvent(player, assetId, wasPurchased);
-  }
-  sendMarketplaceThirdPartyPurchaseFinishedEvent(
-    player: Player,
-    productId: number,
-    receipt: string,
-    wasPurchased: boolean,
-  ) {
-    this.warnDeperatedAnalyticsMethod("sendMarketplaceThirdPartyPurchaseFinishedEvent");
-    this.getAnalytics().sendMarketplaceThirdPartyPurchaseFinishedEvent(player, productId, receipt, wasPurchased);
-  }
-  sendMarketplaceProductPurchaseFinishedEvent(player: Player, productId: number, wasPurchased: boolean) {
-    this.warnDeperatedAnalyticsMethod("sendMarketplaceProductPurchaseFinishedEvent");
-    this.getAnalytics().sendMarketplaceProductPurchaseFinishedEvent(player, productId, wasPurchased);
-  }
-  sendProcessReceiptEvent(receiptInfo: ReceiptInfo) {
-    this.warnDeperatedAnalyticsMethod("sendProcessReceiptEvent");
-    this.getAnalytics().sendProcessReceiptEvent(receiptInfo);
-  }
-  sendEconomyEvent(
-    sender: number,
-    recipient: number,
-    currency: string,
-    amount: number,
-    item: string,
-    meta: Record<string, unknown> = {},
-  ) {
-    this.warnDeperatedAnalyticsMethod("sendEconomyEvent");
-    this.getAnalytics().sendEconomyEvent(sender, recipient, currency, amount, item, meta);
-  }
-  sendStatsEvent() {
-    this.warnDeperatedAnalyticsMethod("sendStatsEvent");
-    this.getAnalytics().sendStatsEvent();
   }
 }
 

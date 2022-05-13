@@ -200,6 +200,20 @@ export default class Analytics extends Module {
     this.admin.socket.send(
       "heartbeat",
       this.buildEvent({
+        // Stats
+        contactsCount: StatsService.ContactsCount,
+        dataReceiveKbps: StatsService.DataReceiveKbps,
+        dataSendKbps: StatsService.DataSendKbps,
+        heartbeatTimeMs: StatsService.HeartbeatTimeMs,
+        instanceCount: StatsService.InstanceCount,
+        movingPrimitivesCount: StatsService.MovingPrimitivesCount,
+        physicsReceiveKbps: StatsService.PhysicsReceiveKbps,
+        physicsSendKbps: StatsService.PhysicsSendKbps,
+        physicsStepTimeMs: StatsService.PhysicsStepTimeMs,
+        primitivesCount: StatsService.PrimitivesCount,
+        totalMemoryUsageMb: StatsService.GetTotalMemoryUsageMb(),
+        // Players
+        onlineCount: Players.GetPlayers().size(),
         players: (Players.GetChildren() as Player[]).map((p) => p.UserId),
       }),
     );

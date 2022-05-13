@@ -23,7 +23,6 @@ export type Event = AutoEvents | CustomEvents;
 export interface Config {
   api: {
     base: string;
-    socketio: string;
     loggingLevel: Enum.AnalyticsLogLevel;
     DEBUGGING_ONLY_runInStudio: boolean;
   };
@@ -42,6 +41,8 @@ export interface Config {
     disallow: Event[];
   };
   intervals: {
+    ingest: number;
+    ingestRetry: number;
     stats: number;
     heartbeat: number;
     playerPositions: number;

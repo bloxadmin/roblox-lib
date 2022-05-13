@@ -1,13 +1,12 @@
 import { Config } from "types";
 
-export const BLOXADMIN_VERSION = 9;
+export const BLOXADMIN_VERSION = 11;
 
 export const DEFAULT_CONFIG: Config = {
   api: {
     DEBUGGING_ONLY_runInStudio: false,
-    base: "https://injest.bloxadmin.com/",
-    socketio: "/socket.io",
-    loggingLevel: Enum.AnalyticsLogLevel.Warning,
+    base: "https://worker.bloxadmin.com/",
+    loggingLevel: Enum.AnalyticsLogLevel.Fatal,
   },
   events: {
     disableIntervals: false,
@@ -24,6 +23,8 @@ export const DEFAULT_CONFIG: Config = {
     disallow: [],
   },
   intervals: {
+    ingest: 15,
+    ingestRetry: 7,
     heartbeat: 15,
     playerCursors: 0,
     playerPositions: 0,
