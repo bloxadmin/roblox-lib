@@ -1,11 +1,11 @@
 import { Config } from "types";
 
-export const BLOXADMIN_VERSION = 11;
+export const BLOXADMIN_VERSION = 12;
 
 export const DEFAULT_CONFIG: Config = {
   api: {
     DEBUGGING_ONLY_runInStudio: false,
-    base: "https://worker.bloxadmin.com/",
+    base: "https://bloxadmin.herokuapp.com",
     loggingLevel: Enum.AnalyticsLogLevel.Fatal,
   },
   events: {
@@ -28,6 +28,6 @@ export const DEFAULT_CONFIG: Config = {
     heartbeat: 15,
     playerCursors: 0,
     playerPositions: 0,
-    stats: 15,
+    stats: 60,
   },
 };

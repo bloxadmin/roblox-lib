@@ -73,10 +73,10 @@
     "@nodelib/fs.scandir" "2.1.5"
     fastq "^1.6.0"
 
-"@rbxts/compiler-types@^1.2.3-types.0":
-  version "1.2.3-types.1"
-  resolved "https://registry.yarnpkg.com/@rbxts/compiler-types/-/compiler-types-1.2.3-types.1.tgz#d7945531c917d62bafadd2b5aa6c2f2e88a2036a"
-  integrity sha512-SXXIBazyJ7N6d2xcy471/kqZZpCv7EDOWrRJ45jcv3g00VQaZwYl4Elr10woqRloIblQanwJ7yUqGXAsWv7iuQ==
+"@rbxts/compiler-types@^2.0.4-types.0":
+  version "2.0.4-types.0"
+  resolved "https://registry.yarnpkg.com/@rbxts/compiler-types/-/compiler-types-2.0.4-types.0.tgz#355a81892168118432a743dd1cdd349c4bc2abe9"
+  integrity sha512-kRdXA7RzIUnLrQhjvVLQ//9Nwfndlui43Frqg3k8xrPVz+QJNIqzwx6LHLSwq4c1OBZpYcGgUWIQJkuKxwlskA==
 
 "@rbxts/services@^1.2.0":
   version "1.2.0"

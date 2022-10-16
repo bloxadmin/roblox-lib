@@ -10,10 +10,13 @@ function uuid() {
   })[0];
 }
 
-interface Event {
-  event: string;
-  data: unknown;
-}
+type Event = [
+  1,
+  string,
+  number,
+  Record<string, string>,
+  Record<string, unknown>
+];
 
 export default class Transport {
   private logger: Logger;
@@ -26,6 +29,7 @@ export default class Transport {
   private version: number;
   private interval: number;
   private retryInterval: number;
+  private serverId: string;
 
   constructor(version: number, logger: Logger, config: Config, apiKey: string) {
     this.logger = logger;
@@ -47,9 +51,9 @@ export default class Transport {
       this.secure = false;
     }
 
-    const serverId = game.JobId || uuid();
+    this.serverId = game.JobId || uuid();
 
-    this.path = `/ingest?gid=${game.GameId}&pid=${game.PlaceId}&sid=${serverId}`;
+    this.path = `/ingest`;
 
     this.logger.debug("Transport initialized");
   }
@@ -58,9 +62,20 @@ export default class Transport {
     return `http${this.secure ? "s" : ""}://${this.host}${this.path}`;
   }
 
-  send(event: string, data: unknown) {
+  send(name: string, segments: Record<string, string>, data: Record<string, unknown>) {
     if (this.closed) return;
-    this.writeBuffer.push({ event, data });
+    if (this.writeBuffer.size() > 1000) {
+      this.logger.warn("Write buffer is full, dropping event. Is BloxAdmin down?");
+      return;
+    }
+    this.logger.verbose(`Sending event ${name}`);
+    this.writeBuffer.push([
+      1,
+      name,
+      os.time() * 1000,
+      segments,
+      data
+    ]);
   }
 
   flushIn(sec: number) {
@@ -73,7 +88,11 @@ export default class Transport {
     const events = [...this.writeBuffer];
     this.writeBuffer = [];
 
-    const data = HttpService.JSONEncode(events);
+    const data = HttpService.JSONEncode([{
+      game: `${game.GameId}`,
+      place: `${game.PlaceId}`,
+      server: this.serverId,
+    }, ...events]);
 
     this.logger.debug(`Sending ${events.size()} events`);
     this.logger.verbose(`Data: ${data}`);

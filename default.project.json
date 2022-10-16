@@ -1,37 +1,34 @@
 {
-	"name": "bloxadmin",
-	"globIgnorePaths": [
-		"**/package.json",
-		"**/tsconfig.json"
-	],
-	"tree": {
-		"$className": "DataModel",
-		"Workspace": {
-			"$className": "Workspace",
-			"$properties": {
-				"FilteringEnabled": true
-			}
-		},
-		"ReplicatedStorage": {
-			"$className": "ReplicatedStorage",
-			"$properties": {
-				"FilteringEnabled": true
-			},
-			"MainModule": {
-				"$path": "out",
-				"include": {
-					"$path": "include",
-					"node_modules": {
-						"$path": "node_modules/@rbxts"
-					}
-				}
-			}
-		},
-		"HttpService": {
-			"$className": "HttpService",
-			"$properties": {
-				"HttpEnabled": true
-			}
-		}
-	}
+  "name": "bloxadmin-rbx",
+  "globIgnorePaths": [
+    "**/package.json",
+    "**/tsconfig.json"
+  ],
+  "tree": {
+    "$className": "DataModel",
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "FilteringEnabled": true
+      }
+    },
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "MainModule": {
+        "$path": "out",
+        "include": {
+          "$path": "include",
+          "node_modules": {
+            "$path": "node_modules/@rbxts"
+          }
+        }
+      }
+    },
+    "HttpService": {
+      "$className": "HttpService",
+      "$properties": {
+        "HttpEnabled": true
+      }
+    }
+  }
 }
