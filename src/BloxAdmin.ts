@@ -1,10 +1,10 @@
-import EventEmitter from "EventEmitter";
+import EventEmitter, { Event } from "EventEmitter";
 import { Config, InitConfig } from "types";
 import Logger from "Logger";
-import Transport from "Transport";
-import { BLOXADMIN_VERSION, DEFAULT_CONFIG } from "consts";
+import { DEFAULT_CONFIG } from "consts";
 import { Module } from "Module";
 import Analytics from "modules/Analytics";
+import RemoteMessaging from "RemoteMessaging";
 
 const HttpService = game.GetService("HttpService");
 const RunService = game.GetService("RunService");
@@ -17,13 +17,17 @@ function uuid() {
   })[0];
 }
 
-export class BloxAdmin extends EventEmitter {
+export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   config: Config;
-  socket: Transport;
   logger: Logger;
+  readonly messenger: RemoteMessaging<[number, ...unknown[]]>;
   private sessionIds: Record<number, string>;
   private apiKey: string;
   private modules: Record<string, Module>;
+  private randomServerId: string;
+
+  // Modules
+  public readonly analytics?: Analytics;
 
   constructor(apiKey: string, config: InitConfig = {}) {
     super();
@@ -47,20 +51,50 @@ export class BloxAdmin extends EventEmitter {
         ...(config.intervals || {}),
       },
     };
-    this.logger = new Logger("BloxAdmin", this.config.api.loggingLevel);
+    this.randomServerId = uuid();
+    this.logger = new Logger(
+      "BloxAdmin",
+      this.config.api.loggingLevel || Enum.AnalyticsLogLevel.Warning,
+      this.config.api.loggingHandlers,
+    );
+    if (!this.config.api.loggingLevel && RunService.IsStudio()) {
+      this.logger.info(
+        `Logging level set to ${Enum.AnalyticsLogLevel.Warning} because in studio and no logging level set`,
+      );
+    }
     this.logger.debug("Starting");
     this.sessionIds = {};
     this.modules = {};
-    this.socket = new Transport(BLOXADMIN_VERSION, this.logger.sub("Transport"), this.config, this.apiKey);
+    this.messenger = new RemoteMessaging({
+      name: "BloxAdmin",
+      apiKey: this.apiKey,
+      config: this.config,
+      localId: this.serverId(),
+      url: `${this.config.api.base}/games/${game.GameId}/servers/${this.serverId()}/messaging`,
+      logger: this.logger.sub("RemoteMessaging"),
+    });
+
+    this.logger.verbose("Loading config:", tostring(this.config));
 
     if (RunService.IsStudio() && !this.config.api.DEBUGGING_ONLY_runInStudio) {
       this.logger.warn("Not starting BloxAdmin because in studio");
       return;
     }
 
-    this.loadModule(new Analytics(this));
+    this.analytics = this.loadModule(new Analytics(this));
 
-    this.start();
+    this.messenger.on("message", (message) => {
+      this.logger.info(`Received message: ${message}`);
+    });
+
+    // Call start on next clock cycle
+    delay(0, () => {
+      this.start();
+    });
+  }
+
+  public serverId() {
+    return game.JobId || this.randomServerId;
   }
 
   start() {
@@ -70,16 +104,19 @@ export class BloxAdmin extends EventEmitter {
       this.modules[mod.name].enable();
     }
 
-    this.socket.flush();
+    this.messenger.connectEmitter();
+    this.messenger.connectRemote();
 
     this.logger.info("Ready");
+
+    this.emit("ready");
   }
 
   getAnalytics(): Analytics {
-    return this.modules["Analytics"] as Analytics;
+    return this.analytics!;
   }
 
-  loadModule(mod: Module) {
+  loadModule<M extends Module>(mod: M) {
     if (this.modules[mod.name]) {
       this.logger.warn(
         debug.traceback(
@@ -91,6 +128,7 @@ export class BloxAdmin extends EventEmitter {
 
     mod.logger.debug("Loaded");
     this.modules[mod.name] = mod;
+    return mod;
   }
 
   getPlayerSessionId(playerId: number, create = true) {
@@ -101,8 +139,13 @@ export class BloxAdmin extends EventEmitter {
 }
 
 export default function init(apiKey: string, config: InitConfig = {}) {
-  const g = _G as { _BloxAdmin: BloxAdmin };
-  g._BloxAdmin = g._BloxAdmin || new BloxAdmin(apiKey, config);
+  try {
+    const g = _G as { _BloxAdmin: BloxAdmin };
+    const ba = g._BloxAdmin || new BloxAdmin(apiKey, config);
+    g._BloxAdmin = ba;
 
-  return g._BloxAdmin;
+    return ba;
+  } catch (e) {
+    // Do nothing
+  }
 }

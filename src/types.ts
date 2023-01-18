@@ -24,6 +24,7 @@ export interface Config {
   api: {
     base: string;
     loggingLevel: Enum.AnalyticsLogLevel;
+    loggingHandlers: string[] | false;
     DEBUGGING_ONLY_runInStudio: boolean;
   };
   events: {

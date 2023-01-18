@@ -15,15 +15,15 @@ export default class Analytics extends Module {
   }
 
   enable(): void {
-    // this.admin.socket.on("connect", () => {
+    // this.on("connect", () => {
     //   this.logger.info("Connected to injestor");
     // });
 
-    // this.admin.socket.on("disconnect", () => {
+    // this.on("disconnect", () => {
     //   this.logger.info("Disconnected from injestor");
     // });
 
-    // this.admin.socket.on("error", (err) => {
+    // this.on("error", (err) => {
     //   this.logger.error("Api Error:", err);
     // });
 
@@ -32,6 +32,10 @@ export default class Analytics extends Module {
     if (this.admin.config.intervals.playerPositions) this.playerPositionInterval();
     if (this.admin.config.intervals.playerCursors) this.playerCursorInterval();
     this.heartbeatInterval();
+  }
+
+  send(name: string, segments: Record<string, string>, data: Record<string, unknown>, priority = 0) {
+    this.admin.messenger.sendRemote([1, name, os.time(), segments, data], priority);
   }
 
   private setupPlayer(player: Player) {
@@ -45,8 +49,8 @@ export default class Analytics extends Module {
   private defaultEvents() {
     game.BindToClose(() => {
       this.sendServerCloseEvent();
-      // this.admin.socket.close();
-      this.admin.socket.syncFlush();
+
+      this.admin.messenger.serverStop();
     });
 
     Players.PlayerAdded.Connect((player) => {
@@ -85,11 +89,9 @@ export default class Analytics extends Module {
 
     try {
       // eslint-disable-next-line roblox-ts/no-any
-      (MarketplaceService as unknown as any).PromptProductPurchaseFinished.Connect(
-        (player: Player, productId: number, wasPurchased: boolean) => {
-          this.sendMarketplaceProductPurchaseFinishedEvent(player, productId, wasPurchased);
-        },
-      );
+      MarketplaceService.PromptProductPurchaseFinished.Connect((player, productId, wasPurchased) => {
+        this.sendMarketplaceProductPurchaseFinishedEvent(player, productId, wasPurchased);
+      });
     } catch (e) {
       // Ignored
     }
@@ -141,9 +143,8 @@ export default class Analytics extends Module {
   private getPlayerSegments(player: Player) {
     return {
       player: `${player.UserId}`,
-    }
+    };
   }
-
 
   private eventDisallowed(
     event: Event,
@@ -184,7 +185,7 @@ export default class Analytics extends Module {
    */
   private sendHeartbeat() {
     // This event must be allowed
-    this.admin.socket.send(
+    this.send(
       "heartbeat",
       {},
       {
@@ -202,8 +203,9 @@ export default class Analytics extends Module {
         totalMemoryUsageMb: StatsService.GetTotalMemoryUsageMb(),
         // Players
         onlineCount: Players.GetPlayers().size(),
-        players: (Players.GetChildren() as Player[]).map((p) => p.UserId).join(','),
+        players: (Players.GetChildren() as Player[]).map((p) => p.UserId),
       },
+      10, // High priority as this is used to check if the server is still alive
     );
   }
 
@@ -216,15 +218,16 @@ export default class Analytics extends Module {
    */
   private sendServerOpenEvent() {
     // This event must be allowed
-    this.admin.socket.send(
+    this.send(
       "serverOpen",
       {},
       {
         placeVersion: game.PlaceVersion,
         privateServerId: game.PrivateServerId,
-        privateServerOwnerId: tostring(game.PrivateServerOwnerId),
+        privateServerOwnerId: game.PrivateServerOwnerId,
         scriptVersion: BLOXADMIN_VERSION,
       },
+      15,
     );
   }
 
@@ -237,7 +240,7 @@ export default class Analytics extends Module {
    */
   private sendServerCloseEvent() {
     // This event must be allowed
-    this.admin.socket.send("serverClose", {}, {});
+    this.send("serverClose", {}, {}, 5);
   }
 
   /**
@@ -254,7 +257,7 @@ export default class Analytics extends Module {
 
     if (message.sub(0, 10) === "[BloxAdmin") return;
 
-    this.admin.socket.send(
+    this.send(
       "consoleLog",
       {},
       {
@@ -277,7 +280,7 @@ export default class Analytics extends Module {
   sendScriptErrorEvent(message: string, trace: string, sk: LuaSourceContainer | undefined) {
     if (this.eventDisallowed("scriptError", ["auto"])) return;
 
-    this.admin.socket.send(
+    this.send(
       "scriptError",
       {},
       {
@@ -301,16 +304,12 @@ export default class Analytics extends Module {
 
     const joinData = player.GetJoinData();
 
-    this.admin.socket.send(
-      "playerJoin",
-      this.getPlayerSegments(player),
-      {
-        sourceGameId: joinData.SourceGameId !== undefined ? tostring(joinData.SourceGameId) : undefined,
-        sourcePlaceId: joinData.SourcePlaceId !== undefined ? tostring(joinData.SourcePlaceId) : undefined,
-        partyMembers: joinData.Members?.map((m) => tostring(m)) || [],
-        teleportData: joinData.TeleportData,
-      },
-    );
+    this.send("playerJoin", this.getPlayerSegments(player), {
+      sourceGameId: joinData.SourceGameId !== undefined ? joinData.SourceGameId : undefined,
+      sourcePlaceId: joinData.SourcePlaceId !== undefined ? joinData.SourcePlaceId : undefined,
+      partyMembers: joinData.Members?.map((m) => m) || [],
+      teleportData: joinData.TeleportData,
+    });
   }
 
   /**
@@ -324,7 +323,7 @@ export default class Analytics extends Module {
   sendPlayerLeaveEvent(player: Player) {
     if (this.eventDisallowed("playerLeave", ["auto", "player"])) return;
 
-    this.admin.socket.send("playerLeave", this.getPlayerSegments(player), { followPlayerId: 0 });
+    this.send("playerLeave", this.getPlayerSegments(player), { followPlayerId: 0 });
   }
 
   /**
@@ -346,18 +345,14 @@ export default class Analytics extends Module {
     const position = part.Position;
     const orientation = part.Orientation;
 
-    this.admin.socket.send(
-      "playerPosition",
-      this.getPlayerSegments(player),
-      {
-        x: position.X,
-        y: position.Y,
-        z: position.Z,
-        pitch: orientation.X,
-        yaw: orientation.Y,
-        roll: orientation.Z,
-      },
-    );
+    this.send("playerPosition", this.getPlayerSegments(player), {
+      x: position.X,
+      y: position.Y,
+      z: position.Z,
+      pitch: orientation.X,
+      yaw: orientation.Y,
+      roll: orientation.Z,
+    });
   }
 
   /**
@@ -371,14 +366,10 @@ export default class Analytics extends Module {
   sendPlayerChatEvent(player: Player, message: string, recipient?: Player) {
     if (this.eventDisallowed("playerChat", ["auto", "player", "text"])) return;
 
-    this.admin.socket.send(
-      "playerChat",
-      this.getPlayerSegments(player),
-      {
-        message,
-        recipientId: recipient?.UserId,
-      },
-    );
+    this.send("playerChat", this.getPlayerSegments(player), {
+      message,
+      recipientId: recipient?.UserId,
+    });
   }
 
   /**
@@ -403,15 +394,11 @@ export default class Analytics extends Module {
   sendPlayerTextInputEvent(player: Player, tag: string, text: string, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("playerTextInput", ["custom", "player", "text"])) return;
 
-    this.admin.socket.send(
-      "playerTextInput",
-      this.getPlayerSegments(player),
-      {
-        tag,
-        text,
-        meta,
-      },
-    );
+    this.send("playerTextInput", this.getPlayerSegments(player), {
+      tag,
+      text,
+      meta,
+    });
   }
 
   /**
@@ -429,14 +416,10 @@ export default class Analytics extends Module {
   sendPlayerTriggerEvent(player: Player, tag: string, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("playerTrigger", ["custom", "player"])) return;
 
-    this.admin.socket.send(
-      "playerTrigger",
-      this.getPlayerSegments(player),
-      {
-        tag,
-        meta,
-      },
-    );
+    this.send("playerTrigger", this.getPlayerSegments(player), {
+      tag,
+      meta,
+    });
   }
 
   /**
@@ -452,7 +435,7 @@ export default class Analytics extends Module {
   sendTriggerEvent(tag: string, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("trigger", ["custom", "player"])) return;
 
-    this.admin.socket.send(tag, {}, meta);
+    this.send(tag, {}, meta);
   }
 
   /**
@@ -470,7 +453,7 @@ export default class Analytics extends Module {
   sendLocationTrigger(tag: string, location: Vector3, meta: Record<string, unknown> = {}) {
     if (this.eventDisallowed("locationTrigger", ["custom", "location"])) return;
 
-    this.admin.socket.send(
+    this.send(
       tag,
       {},
       {
@@ -503,67 +486,47 @@ export default class Analytics extends Module {
 
     if (!location) return;
 
-    this.admin.socket.send(
-      tag,
-      this.getPlayerSegments(player),
-      {
-        x: location.X,
-        y: location.Y,
-        z: location.Z,
-        ...meta,
-      },
-    );
+    this.send(tag, this.getPlayerSegments(player), {
+      x: location.X,
+      y: location.Y,
+      z: location.Z,
+      ...meta,
+    });
   }
 
   sendMarketplaceBundlePurchaseFinishedEvent(player: Player, bundleId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplaceBundlePurchaseFinished", ["player", "marketplace"])) return;
 
-    this.admin.socket.send(
-      "marketplaceBundlePurchaseFinished",
-      this.getPlayerSegments(player),
-      {
-        bundleId,
-        wasPurchased,
-      },
-    );
+    this.send("marketplaceBundlePurchaseFinished", this.getPlayerSegments(player), {
+      bundleId,
+      wasPurchased,
+    });
   }
 
   sendMarketplaceGamePassPurchaseFinishedEvent(player: Player, gamePassId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplaceGamePassPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.admin.socket.send(
-      "marketplaceGamePassPurchaseFinished",
-      this.getPlayerSegments(player),
-      {
-        gamePassId,
-        wasPurchased,
-      },
-    );
+    this.send("marketplaceGamePassPurchaseFinished", this.getPlayerSegments(player), {
+      gamePassId,
+      wasPurchased,
+    });
   }
 
   sendMarketplacePremiumPurchaseFinishedEvent(player: Player, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplacePremiumPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.admin.socket.send(
-      "marketplacePremiumPurchaseFinished",
-      this.getPlayerSegments(player),
-      {
-        wasPurchased,
-      },
-    );
+    this.send("marketplacePremiumPurchaseFinished", this.getPlayerSegments(player), {
+      wasPurchased,
+    });
   }
 
   sendMarketplacePromptPurchaseFinishedEvent(player: Player, assetId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplacePromptPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.admin.socket.send(
-      "marketplacePromptPurchaseFinished",
-      this.getPlayerSegments(player),
-      {
-        assetId,
-        wasPurchased,
-      },
-    );
+    this.send("marketplacePromptPurchaseFinished", this.getPlayerSegments(player), {
+      assetId,
+      wasPurchased,
+    });
   }
 
   sendMarketplaceThirdPartyPurchaseFinishedEvent(
@@ -574,23 +537,21 @@ export default class Analytics extends Module {
   ) {
     if (this.eventDisallowed("marketplaceThirdPartyPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.admin.socket.send(
-      "marketplaceThirdPartyPurchaseFinished",
-      this.getPlayerSegments(player),
-      {
-        productId,
-        receipt,
-        wasPurchased,
-      },
-    );
+    this.send("marketplaceThirdPartyPurchaseFinished", this.getPlayerSegments(player), {
+      productId,
+      receipt,
+      wasPurchased,
+    });
   }
 
-  sendMarketplaceProductPurchaseFinishedEvent(player: Player, productId: number, wasPurchased: boolean) {
+  sendMarketplaceProductPurchaseFinishedEvent(player: number, productId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplaceProductPurchaseFinished", ["player", "marketplace"])) return;
 
-    this.admin.socket.send(
+    this.send(
       "marketplaceProductPurchaseFinished",
-      this.getPlayerSegments(player),
+      {
+        player: tostring(player),
+      },
       {
         productId,
         wasPurchased,
@@ -603,7 +564,7 @@ export default class Analytics extends Module {
     try {
       if (this.eventDisallowed("processReceipt", ["marketplace"])) return;
 
-      this.admin.socket.send(
+      this.send(
         "marketplaceProcessReceipt",
         {},
         {
@@ -619,17 +580,6 @@ export default class Analytics extends Module {
     }
   }
 
-  sendEconomyEvent(
-    sender: number,
-    recipient: number,
-    currency: string,
-    amount: number,
-    item: string,
-    meta: Record<string, unknown> = {},
-  ) {
-    // TODO: implement
-  }
-
   /**
    * Sends the StatsEvent to the injestor.
    *
@@ -643,7 +593,9 @@ export default class Analytics extends Module {
     // This event must be allowed as it acts as a heartbeat
     // if (this.eventDisallowed("stats", ["auto", "intervals"])) return;
 
-    const stats = {
+    const stats: {
+      [satName: string]: number;
+    } = {
       contactsCount: StatsService.ContactsCount,
       dataReceiveKbps: StatsService.DataReceiveKbps,
       dataSendKbps: StatsService.DataSendKbps,
@@ -680,6 +632,6 @@ export default class Analytics extends Module {
       terrainVoxelsMemoryUsageMb: StatsService.GetMemoryUsageMbForTag("TerrainVoxels"),
     };
 
-    this.admin.socket.send("stats", {}, stats);
+    this.send("stats", {}, stats);
   }
 }

@@ -1,11 +1,5 @@
 export default class Logger {
-  private name: string;
-  level: Enum.AnalyticsLogLevel;
-
-  constructor(name: string, level: Enum.AnalyticsLogLevel) {
-    this.name = name;
-    this.level = level;
-  }
+  constructor(public readonly name: string, public level: Enum.AnalyticsLogLevel, public handlers: string[] | false) {}
 
   public fatal(...msgs: string[]) {
     this.log(Enum.AnalyticsLogLevel.Fatal, ...msgs);
@@ -53,13 +47,13 @@ export default class Logger {
         levelName = "INFO";
         break;
     }
-    if (this.level.Value <= level.Value) {
+    if (this.level.Value <= level.Value && (this.handlers === false || this.handlers.includes(levelName))) {
       const message = msgs.map((msg) => tostring(msg)).join(" ");
       print(`[${this.name}] <${levelName}> ${message}`);
     }
   }
 
   public sub(name: string) {
-    return new Logger(`${this.name}/${name}`, this.level);
+    return new Logger(`${this.name}/${name}`, this.level, this.handlers);
   }
 }

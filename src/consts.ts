@@ -1,12 +1,13 @@
 import { Config } from "types";
 
-export const BLOXADMIN_VERSION = 12;
+export const BLOXADMIN_VERSION = 100;
 
 export const DEFAULT_CONFIG: Config = {
   api: {
     DEBUGGING_ONLY_runInStudio: false,
-    base: "https://bloxadmin.herokuapp.com",
+    base: "https://api.bloxadmin.com",
     loggingLevel: Enum.AnalyticsLogLevel.Fatal,
+    loggingHandlers: false,
   },
   events: {
     disableIntervals: false,

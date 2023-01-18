@@ -1,48 +1,68 @@
-export default class EventEmitter {
-  private _listeners: { [key: string]: Callback[] } = {};
+export type Events = {
+  [key: string]: unknown[];
+};
 
-  public on(event: string, callback: Callback) {
-    if (!this._listeners[event]) {
-      this._listeners[event] = [];
-    }
-    this._listeners[event].push(callback);
+export type Event<E extends string = string, A extends unknown[] = unknown[]> = [E, A];
+
+export type EventCallback<A extends unknown[]> = (...args: A) => void;
+
+export default class EventEmitter<E extends Events = {}> {
+  private listeners: Record<keyof E | "*", unknown[]>;
+
+  constructor() {
+    this.listeners = {} as Record<keyof E | "*", unknown[]>;
   }
 
-  private callListeners(callbacks: Callback[], event: string, ...args: unknown[]) {
+  public on<N extends keyof E>(event: N | "*", callback: EventCallback<E[N]>) {
+    if (!this.listeners[event]) {
+      this.listeners[event] = [];
+    }
+    (this.listeners[event] as EventCallback<E[N]>[]).push(callback);
+  }
+
+  private callListeners<N extends keyof E>(callbacks: EventCallback<E[N]>[], event: N, ...args: E[N]): boolean {
+    let errored = false;
     callbacks.forEach((callback) => {
       const [success, err] = pcall(() => {
         callback(...args);
       });
 
       if (!success) {
-        pcall(error, `Error while calling event ${event}:\n${err}`, 0);
+        errored = true;
+        pcall(error, `Error while calling event ${event as string}:\n${err}`, 0);
       }
     });
+
+    return !errored;
   }
 
-  public emit(event: string, ...args: unknown[]) {
-    this.callListeners(this._listeners[event] || [], event, ...args);
-    this.callListeners(this._listeners["*"] || [], event, event, ...args);
+  public emit<N extends keyof E>(event: N, ...args: E[N]) {
+    this.callListeners((this.listeners[event] as EventCallback<E[N]>[]) || [], event, ...args);
+    this.callListeners(
+      (this.listeners["*"] as EventCallback<E[N]>[]) || [],
+      event,
+      ...([event, ...args] as unknown as E[N]),
+    );
   }
 
-  public removeListener(event: string, callback: Callback) {
-    if (this._listeners[event]) {
-      this._listeners[event] = this._listeners[event].filter((c) => c !== callback);
+  public removeListener<N extends keyof E>(event: N | "*", callback: EventCallback<E[N]>) {
+    if (this.listeners[event]) {
+      this.listeners[event] = (this.listeners[event] as EventCallback<E[N]>[]).filter((c) => c !== callback);
     }
   }
 
-  public removeAllListeners(event: string) {
-    this._listeners[event] = [];
+  public removeAllListeners<N extends keyof E>(event: N) {
+    this.listeners[event] = [];
     if (event === "*") {
-      this._listeners = {};
+      this.listeners = {} as Record<keyof E | "*", unknown[]>;
     }
   }
 
-  public onAny(callback: Callback) {
+  public onAny(callback: EventCallback<unknown[]>) {
     this.on("*", callback);
   }
 
-  public removeAnyListener(callback: Callback) {
+  public removeAnyListener(callback: EventCallback<unknown[]>) {
     this.removeListener("*", callback);
   }
 }
