@@ -163,6 +163,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
   }
 
   public fetchRemoteOptions(): RemoteOptions | undefined {
+    this.logger?.sub("fetchRemoteOptions()").debug(`GETTING FROM "${this.url}"`);
     const result = pcall<[], RequestAsyncResponse>(() => {
       return HttpService.RequestAsync({
         Method: "GET",
@@ -197,7 +198,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
       const options = this.fetchRemoteOptions();
 
       if (!options) {
-        error(`Failed to fetch remote options for remote messaging: ${this.name}`, 3);
+        error(`Failed to fetch remote options for remote messaging (${this.url}): ${this.name}`, 3);
       }
 
       this.remoteOptions = options;

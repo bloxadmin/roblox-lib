@@ -1,10 +1,11 @@
-import EventEmitter, { Event } from "EventEmitter";
-import { Config, InitConfig } from "types";
+import EventEmitter from "EventEmitter";
 import Logger from "Logger";
-import { DEFAULT_CONFIG } from "consts";
 import { Module } from "Module";
-import Analytics from "modules/Analytics";
 import RemoteMessaging from "RemoteMessaging";
+import { DEFAULT_CONFIG } from "consts";
+import Analytics from "modules/Analytics";
+import DebugUI from "modules/DebugUI";
+import { Config, InitConfig } from "types";
 
 const HttpService = game.GetService("HttpService");
 const RunService = game.GetService("RunService");
@@ -82,6 +83,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     }
 
     this.analytics = this.loadModule(new Analytics(this));
+    this.loadModule(new DebugUI(this));
 
     this.messenger.on("message", (message) => {
       this.logger.info(`Received message: ${message}`);

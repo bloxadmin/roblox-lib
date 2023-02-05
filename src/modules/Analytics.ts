@@ -10,6 +10,8 @@ const StatsService = game.GetService("Stats");
 const MarketplaceService = game.GetService("MarketplaceService");
 
 export default class Analytics extends Module {
+  playerJoinTimes: Record<number, number> = {};
+
   constructor(admin: BloxAdmin) {
     super("Analytics", admin);
   }
@@ -39,6 +41,8 @@ export default class Analytics extends Module {
   }
 
   private setupPlayer(player: Player) {
+    this.playerJoinTimes[player.UserId] = os.time();
+
     this.sendPlayerJoinEvent(player);
 
     player.Chatted.Connect((message, recipient) => {
@@ -61,7 +65,9 @@ export default class Analytics extends Module {
       this.setupPlayer(player as Player);
     });
 
-    Players.PlayerRemoving.Connect((player) => this.sendPlayerLeaveEvent(player));
+    Players.PlayerRemoving.Connect((player) => {
+      this.sendPlayerLeaveEvent(player);
+    });
 
     LogService.MessageOut.Connect((message, msgType) => {
       this.sendConsoleLogEvent(message, msgType);
@@ -189,18 +195,6 @@ export default class Analytics extends Module {
       "heartbeat",
       {},
       {
-        // Stats
-        contactsCount: StatsService.ContactsCount,
-        dataReceiveKbps: StatsService.DataReceiveKbps,
-        dataSendKbps: StatsService.DataSendKbps,
-        heartbeatTimeMs: StatsService.HeartbeatTimeMs,
-        instanceCount: StatsService.InstanceCount,
-        movingPrimitivesCount: StatsService.MovingPrimitivesCount,
-        physicsReceiveKbps: StatsService.PhysicsReceiveKbps,
-        physicsSendKbps: StatsService.PhysicsSendKbps,
-        physicsStepTimeMs: StatsService.PhysicsStepTimeMs,
-        primitivesCount: StatsService.PrimitivesCount,
-        totalMemoryUsageMb: StatsService.GetTotalMemoryUsageMb(),
         // Players
         onlineCount: Players.GetPlayers().size(),
         players: (Players.GetChildren() as Player[]).map((p) => p.UserId),
@@ -323,7 +317,12 @@ export default class Analytics extends Module {
   sendPlayerLeaveEvent(player: Player) {
     if (this.eventDisallowed("playerLeave", ["auto", "player"])) return;
 
-    this.send("playerLeave", this.getPlayerSegments(player), { followPlayerId: 0 });
+    const playTime = this.playerJoinTimes[player.UserId] ? os.time() - this.playerJoinTimes[player.UserId] : 0;
+
+    this.send("playerLeave", this.getPlayerSegments(player), {
+      followPlayerId: 0,
+      playTime,
+    });
   }
 
   /**
@@ -609,6 +608,7 @@ export default class Analytics extends Module {
       totalMemoryUsageMb: StatsService.GetTotalMemoryUsageMb(),
       // Specifc memotry usage
       animationMemoryUsageMb: StatsService.GetMemoryUsageMbForTag("Animation"),
+      geometryCsgMemoryUsageMb: StatsService.GetMemoryUsageMbForTag("GeometryCSG"),
       graphicsMeshPartsMemoryUsageMb: StatsService.GetMemoryUsageMbForTag("GraphicsMeshParts"),
       graphicsParticlesMemoryUsageMb: StatsService.GetMemoryUsageMbForTag("GraphicsParticles"),
       graphicsPartsMemoryUsageMb: StatsService.GetMemoryUsageMbForTag("GraphicsParts"),

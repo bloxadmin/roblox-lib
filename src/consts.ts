@@ -29,6 +29,6 @@ export const DEFAULT_CONFIG: Config = {
     heartbeat: 15,
     playerCursors: 0,
     playerPositions: 0,
-    stats: 60,
+    stats: 15,
   },
 };
