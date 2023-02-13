@@ -1,19 +1,41 @@
+import { Workspace } from "@rbxts/services";
 import { BloxAdmin } from "BloxAdmin";
 import { BLOXADMIN_VERSION, DEFAULT_CONFIG } from "consts";
 import { Module } from "Module";
-import { Event } from "types";
+import { Event, EventType, PlayerReadyData } from "types";
 
-const Players = game.GetService("Players");
 const LogService = game.GetService("LogService");
+const MarketplaceService = game.GetService("MarketplaceService");
+const Players = game.GetService("Players");
+const RunService = game.GetService("RunService");
 const ScriptContext = game.GetService("ScriptContext");
 const StatsService = game.GetService("Stats");
-const MarketplaceService = game.GetService("MarketplaceService");
+const StarterPlayer = game.GetService("StarterPlayer");
 
 export default class Analytics extends Module {
   playerJoinTimes: Record<number, number> = {};
+  playerReadyEvent: RemoteEvent<(data: PlayerReadyData) => void>;
 
   constructor(admin: BloxAdmin) {
     super("Analytics", admin);
+
+    this.playerReadyEvent = new Instance("RemoteEvent");
+    this.playerReadyEvent.Name = "AnalyticsPlayerReadyEvent";
+    this.playerReadyEvent.Parent = this.admin.eventsFolder;
+
+    const analyticsLocal = script.Parent?.WaitForChild("AnalyticsLocal");
+
+    if (analyticsLocal) {
+      analyticsLocal.Name = `BloxAdmin${analyticsLocal.Name}`;
+      analyticsLocal.Parent = StarterPlayer.WaitForChild("StarterPlayerScripts");
+
+      // Give script to all players that have already joined
+      Players.GetPlayers().forEach((player) => {
+        const clone = analyticsLocal.Clone();
+
+        clone.Parent = player.WaitForChild("PlayerGui");
+      });
+    }
   }
 
   enable(): void {
@@ -36,8 +58,18 @@ export default class Analytics extends Module {
     this.heartbeatInterval();
   }
 
-  send(name: string, segments: Record<string, string>, data: Record<string, unknown>, priority = 0) {
-    this.admin.messenger.sendRemote([1, name, os.time(), segments, data], priority);
+  send(name: string, segments: Record<string, string>, data: unknown, priority = 0) {
+    if (RunService.IsStudio() && !this.admin.config.api.DEBUGGING_ONLY_runInStudio) {
+      this.logger.verbose(`Not sending event (${name}) because in studio`);
+      return;
+    }
+
+    const [success, e] = this.admin.messenger.sendRemote(
+      [EventType.Analytics, name, os.time(), segments, data],
+      priority,
+    );
+
+    if (!success) this.logger.error(`Error sending event (${name}):`, tostring(e));
   }
 
   private setupPlayer(player: Player) {
@@ -62,11 +94,23 @@ export default class Analytics extends Module {
     });
 
     Players.GetChildren().forEach((player) => {
-      this.setupPlayer(player as Player);
+      if (player.IsA("Player")) this.setupPlayer(player);
     });
 
     Players.PlayerRemoving.Connect((player) => {
       this.sendPlayerLeaveEvent(player);
+
+      const id = player.UserId;
+
+      delay(60, () => {
+        if (Players.GetPlayerByUserId(id)) return;
+
+        this.admin.endPlayerSession(id);
+      });
+    });
+
+    this.playerReadyEvent.OnServerEvent.Connect((player, data) => {
+      this.sendPlayerReadyEvent(player, data as PlayerReadyData);
     });
 
     LogService.MessageOut.Connect((message, msgType) => {
@@ -85,33 +129,9 @@ export default class Analytics extends Module {
       this.sendMarketplaceGamePassPurchaseFinishedEvent(player, gamePassId, wasPurchased);
     });
 
-    MarketplaceService.PromptPremiumPurchaseFinished.Connect(((...args: unknown[]) => {
-      // this.sendMarketplacePremiumPurchaseFinishedEvent(player);
-    }) as unknown as () => void);
-
     MarketplaceService.PromptPurchaseFinished.Connect((player, assetId, wasPurchased) => {
       this.sendMarketplacePromptPurchaseFinishedEvent(player, assetId, wasPurchased);
     });
-
-    try {
-      // eslint-disable-next-line roblox-ts/no-any
-      MarketplaceService.PromptProductPurchaseFinished.Connect((player, productId, wasPurchased) => {
-        this.sendMarketplaceProductPurchaseFinishedEvent(player, productId, wasPurchased);
-      });
-    } catch (e) {
-      // Ignored
-    }
-
-    try {
-      // eslint-disable-next-line roblox-ts/no-any
-      (MarketplaceService as unknown as any).ThirdPartyPurchaseFinished.Connect(
-        (player: Player, productId: number, receipt: string, wasPurchased: boolean) => {
-          this.sendMarketplaceThirdPartyPurchaseFinishedEvent(player, productId, receipt, wasPurchased);
-        },
-      );
-    } catch (e) {
-      // Ignored
-    }
 
     this.sendServerOpenEvent();
   }
@@ -146,9 +166,13 @@ export default class Analytics extends Module {
     delay(this.admin.config.intervals.heartbeat || DEFAULT_CONFIG.intervals.heartbeat, () => this.heartbeatInterval());
   }
 
-  private getPlayerSegments(player: Player) {
+  private getPlayerSegments(player: Player | number) {
+    if (!typeIs(player, "number")) {
+      player = player.UserId;
+    }
     return {
-      player: `${player.UserId}`,
+      player: `${player}`,
+      session: this.admin.getPlayerSessionId(player),
     };
   }
 
@@ -323,6 +347,14 @@ export default class Analytics extends Module {
       followPlayerId: 0,
       playTime,
     });
+  }
+
+  sendPlayerReadyEvent(player: Player, data: PlayerReadyData) {
+    if (this.eventDisallowed("playerReady", ["auto", "player"])) return;
+
+    print("Sending player ready event");
+
+    this.send("playerReady", this.getPlayerSegments(player), data);
   }
 
   /**
@@ -511,14 +543,6 @@ export default class Analytics extends Module {
     });
   }
 
-  sendMarketplacePremiumPurchaseFinishedEvent(player: Player, wasPurchased: boolean) {
-    if (this.eventDisallowed("marketplacePremiumPurchaseFinished", ["player", "marketplace"])) return;
-
-    this.send("marketplacePremiumPurchaseFinished", this.getPlayerSegments(player), {
-      wasPurchased,
-    });
-  }
-
   sendMarketplacePromptPurchaseFinishedEvent(player: Player, assetId: number, wasPurchased: boolean) {
     if (this.eventDisallowed("marketplacePromptPurchaseFinished", ["player", "marketplace"])) return;
 
@@ -526,57 +550,6 @@ export default class Analytics extends Module {
       assetId,
       wasPurchased,
     });
-  }
-
-  sendMarketplaceThirdPartyPurchaseFinishedEvent(
-    player: Player,
-    productId: number,
-    receipt: string,
-    wasPurchased: boolean,
-  ) {
-    if (this.eventDisallowed("marketplaceThirdPartyPurchaseFinished", ["player", "marketplace"])) return;
-
-    this.send("marketplaceThirdPartyPurchaseFinished", this.getPlayerSegments(player), {
-      productId,
-      receipt,
-      wasPurchased,
-    });
-  }
-
-  sendMarketplaceProductPurchaseFinishedEvent(player: number, productId: number, wasPurchased: boolean) {
-    if (this.eventDisallowed("marketplaceProductPurchaseFinished", ["player", "marketplace"])) return;
-
-    this.send(
-      "marketplaceProductPurchaseFinished",
-      {
-        player: tostring(player),
-      },
-      {
-        productId,
-        wasPurchased,
-      },
-    );
-  }
-
-  sendProcessReceiptEvent(receiptInfo: ReceiptInfo) {
-    // Function requires extra protection as it could break people's games
-    try {
-      if (this.eventDisallowed("processReceipt", ["marketplace"])) return;
-
-      this.send(
-        "marketplaceProcessReceipt",
-        {},
-        {
-          playerId: receiptInfo.PlayerId,
-          sessionId: this.admin.getPlayerSessionId(receiptInfo.PlayerId, false) || undefined,
-          productId: receiptInfo.ProductId,
-          amount: receiptInfo.CurrencySpent,
-          placeIdWherePurchased: receiptInfo.PlaceIdWherePurchased,
-        },
-      );
-    } catch (e) {
-      this.logger.warn(`CRIT: Error sending processReceipt event: ${e}`);
-    }
   }
 
   /**

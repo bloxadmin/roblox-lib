@@ -56,4 +56,9 @@ export default class Logger {
   public sub(name: string) {
     return new Logger(`${this.name}/${name}`, this.level, this.handlers);
   }
+
+  public updateConfig(level: Enum.AnalyticsLogLevel, handlers: string[] | false) {
+    this.level = level;
+    this.handlers = handlers;
+  }
 }

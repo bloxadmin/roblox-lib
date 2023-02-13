@@ -4,6 +4,7 @@ import { Config } from "types";
 
 const MemoryStoreService = game.GetService("MemoryStoreService");
 const HttpService = game.GetService("HttpService");
+const RunService = game.GetService("RunService");
 
 const MIN_ROBLOX_WAIT = 0.029;
 const QUEUE_PREFIX = "__remote-streaming";
@@ -29,12 +30,14 @@ interface RemoteResponse<M> {
 export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message: [M]; connect: [] }> {
   public readonly name: string;
   public readonly localId: string;
-  public readonly url: string;
-  public readonly apiKey: string;
-  public readonly config: Config;
+  public readonly runMode: string;
+  public url: string;
+  public apiKey?: string;
+  public config: Config;
   public readonly logger?: Logger;
 
   private remoteOptions?: RemoteOptions;
+  private remoteOptionsResolvers: Array<(options: RemoteOptions) => void> = [];
 
   private listeningLocal = false;
   private listeningRemote = false;
@@ -46,14 +49,12 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     name,
     localId,
     url,
-    apiKey,
     config,
     logger,
   }: {
     name: string;
     url: string;
     localId: string;
-    apiKey: string;
     config: Config;
     logger: Logger;
   }) {
@@ -62,9 +63,17 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     this.name = name;
     this.localId = localId;
     this.url = url;
-    this.apiKey = apiKey;
     this.config = config;
     this.logger = logger;
+    this.runMode = [
+      RunService.IsStudio() ? "studio" : "",
+      RunService.IsServer() ? "server" : "",
+      RunService.IsClient() ? "client" : "",
+      RunService.IsRunMode() ? "run_mode" : "",
+      RunService.IsRunning() ? "running" : "",
+    ]
+      .filter((m) => m.size() > 1)
+      .join(",");
 
     this.globalQueue = MemoryStoreService.GetQueue(`${QUEUE_PREFIX}${GLOBAL_QUEUE}.${tostring(name)}`);
     this.localQueue = MemoryStoreService.GetQueue(
@@ -74,6 +83,11 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
   }
 
   public serverStop() {
+    if (RunService.IsStudio() && !this.config.api.DEBUGGING_ONLY_runInStudio) {
+      this.logger?.debug("Skipping flush on studio stop");
+      return;
+    }
+
     // Try to clear the queue when the server stops
     // Will only send a max of 1000 messages
     let result = 100;
@@ -85,21 +99,21 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
   }
 
   public sendRemote(message: M, priority = 0, expiresIn = 3600) {
-    const size = HttpService.JSONEncode(message).size();
-    if (size > 9000) {
-      this.logger?.warn("Message size is too large", `${size} > 9000`);
-      return false;
-    }
-
-    this.logger?.verbose("Sending remote message:", `${message}`);
+    this.logger?.verbose("Sending remote message:", HttpService.JSONEncode(message));
     return pcall(() => {
+      const size = HttpService.JSONEncode(message).size();
+      if (size > 9000) {
+        this.logger?.warn("Message size is too large", `${size} > 9000`);
+        return false;
+      }
+
       this.remoteQueue.AddAsync([this.localId, message], expiresIn, priority);
       return true;
     });
   }
 
   public sendLocal(message: M, id: string, priority = 0, expiresIn = 3600) {
-    this.logger?.verbose("Sending local message:", `${message}`);
+    this.logger?.verbose("Sending local message:", HttpService.JSONEncode(message));
     return pcall(() => {
       if (id === this.localId) {
         this.localQueue.AddAsync(message, expiresIn, priority);
@@ -112,7 +126,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
   }
 
   public sendGlobal(message: M, priority = 0, expiresIn = 3600) {
-    this.logger?.verbose("Sending global message", `${message}`);
+    this.logger?.verbose("Sending global message", HttpService.JSONEncode(message));
     return pcall(() => {
       this.globalQueue.AddAsync(message, expiresIn, priority);
       return true;
@@ -127,7 +141,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     const [readSuccess] = result;
     if (!readSuccess) return;
     const [_, messages, removeId] = result as LuaTuple<[boolean, M[], string]>;
-    this.logger?.verbose(`Got Message: ${messages}`);
+    this.logger?.verbose(`Got Message:`, HttpService.JSONEncode(messages));
     this.logger?.verbose(`Delete Id: ${removeId}`);
     const success = pcall<[M[], (message: M[]) => boolean], boolean>((m, cb) => cb(m), messages, callback);
     if (!success[0] || !success[1]) return;
@@ -162,6 +176,13 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     });
   }
 
+  public async waitForRemoteOptions(): Promise<RemoteOptions> {
+    if (this.remoteOptions) return this.remoteOptions;
+    return new Promise((resolve) => {
+      this.remoteOptionsResolvers.push(resolve);
+    });
+  }
+
   public fetchRemoteOptions(): RemoteOptions | undefined {
     this.logger?.sub("fetchRemoteOptions()").debug(`GETTING FROM "${this.url}"`);
     const result = pcall<[], RequestAsyncResponse>(() => {
@@ -170,6 +191,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
         Headers: {
           Authorization: `Bearer ${this.apiKey}`,
           Accept: "application/json",
+          "x-roblox-mode": this.runMode,
         },
         Url: this.url,
       });
@@ -189,6 +211,12 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     }
 
     const options = HttpService.JSONDecode(response.Body) as RemoteOptions;
+
+    if (options) {
+      this.remoteOptionsResolvers.forEach((resolve) => resolve(options));
+      this.remoteOptionsResolvers = [];
+      this.logger?.sub("fetchRemoteOptions()").debug("RESOLVED");
+    }
 
     return options;
   }
@@ -230,6 +258,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
         Headers: {
           Authorization: `Bearer ${this.apiKey}`,
           Accept: "application/json",
+          "x-roblox-mode": this.runMode,
         },
         Url: `${this.remoteOptions!.url}`,
         Body: HttpService.JSONEncode(postBody),

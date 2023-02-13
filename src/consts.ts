@@ -1,6 +1,6 @@
 import { Config } from "types";
 
-export const BLOXADMIN_VERSION = 100;
+export const BLOXADMIN_VERSION = 103;
 
 export const DEFAULT_CONFIG: Config = {
   api: {

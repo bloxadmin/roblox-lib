@@ -7,7 +7,7 @@ export type MarketplaceEvents =
   | "marketplaceThirdPartyPurchaseFinished"
   | "marketplaceProductPurchaseFinished"
   | "processReceipt";
-export type AutoPlayerEvents = MarketplaceEvents | "playerJoin" | "playerLeave" | "playerChat";
+export type AutoPlayerEvents = MarketplaceEvents | "playerJoin" | "playerLeave" | "playerReady" | "playerChat";
 export type AutoEvents =
   | AutoIntervalEvents
   | AutoPlayerEvents
@@ -55,4 +55,45 @@ export interface InitConfig {
   api?: Partial<Config["api"]>;
   events?: Partial<Config["events"]>;
   intervals?: Partial<Config["intervals"]>;
+}
+
+export enum EventType {
+  ConsoleLog = 0,
+  Analytics = 1,
+  RemoteConfig = 2,
+  Actions = 3,
+  Moderation = 4,
+}
+
+export interface PlayerReadyData {
+  input: {
+    accelerometerEnabled: boolean;
+    gamepadEnabled: boolean;
+    gyroscopeEnabled: boolean;
+    keyboardEnabled: boolean;
+    mouseSensitivity: number;
+    mouseEnabled: boolean;
+    mouseIconEnabled: boolean;
+    touchEnabled: boolean;
+    vrEnabled: boolean;
+  };
+  settings: {
+    computerCameraMovementMode: number;
+    computerMovementMode: number;
+    controlMode: number;
+    gamepadCameraSensitivity: number;
+    mouseSenitivity: number;
+    savedQualityLevel: number;
+    touchCameraMovementMode: number;
+    touchMovementMode: number;
+    inFullscreen: boolean;
+    inStudio: boolean;
+  };
+  camera?: {
+    viewportSize: [number, number];
+    fov: number;
+  };
+  gui: {
+    isTenFootInterface: boolean;
+  };
 }

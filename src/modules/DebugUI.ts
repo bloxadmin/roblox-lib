@@ -32,8 +32,9 @@ export default class DebugUI extends Module {
   createDebugUI(): ScreenGui {
     const debugUI = new Instance("ScreenGui");
 
+    debugUI.DisplayOrder = 1000;
     debugUI.Name = "BloxAdmin";
-    // debugUI.Enabled = false;
+    debugUI.Enabled = false;
 
     const frame = new Instance("Frame");
     frame.Name = "DebugUI";

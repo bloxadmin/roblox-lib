@@ -2,10 +2,11 @@
   "name": "bloxadmin-rbx",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/lib.ts",
   "scripts": {
     "build": "rbxtsc build --type model",
-    "watch": "rbxtsc build --type model --watch --usePolling"
+    "watch": "rbxtsc build --type model --watch --usePolling",
+    "package": "rbxtsc build --type package"
   },
   "keywords": [],
   "author": "",
