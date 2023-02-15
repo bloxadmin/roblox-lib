@@ -1,6 +1,6 @@
 import { Config } from "types";
 
-export const BLOXADMIN_VERSION = 103;
+export const BLOXADMIN_VERSION = 105;
 
 export const DEFAULT_CONFIG: Config = {
   api: {
@@ -25,10 +25,10 @@ export const DEFAULT_CONFIG: Config = {
   },
   intervals: {
     ingest: 15,
-    ingestRetry: 7,
+    ingestRetry: 10,
     heartbeat: 15,
     playerCursors: 0,
     playerPositions: 0,
-    stats: 15,
+    stats: 10,
   },
 };

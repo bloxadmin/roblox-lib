@@ -226,7 +226,8 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
       const options = this.fetchRemoteOptions();
 
       if (!options) {
-        error(`Failed to fetch remote options for remote messaging (${this.url}): ${this.name}`, 3);
+        this.logger?.warn(`Failed to fetch remote options for remote messaging (${this.url}): ${this.name}`);
+        return [-1, undefined];
       }
 
       this.remoteOptions = options;
@@ -310,7 +311,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
   public processRemoteEvents(): number {
     const [queueProcessed, result] = this.flushAndPollRemote();
 
-    if (!result) {
+    if (!result || queueProcessed === -1) {
       return -1;
     }
 
@@ -345,8 +346,10 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
         const took = time() - startAt;
 
         if (result === -1) {
-          if (took - this.config.intervals.ingestRetry >= MIN_ROBLOX_WAIT) {
-            wait(took - this.config.intervals.ingestRetry);
+          const toWait = this.config.intervals.ingestRetry - took;
+          this.logger?.verbose(`Ingest FAILED taking ${took} seconds, waiting ${toWait} seconds`);
+          if (toWait >= MIN_ROBLOX_WAIT) {
+            wait(toWait);
           }
 
           continue;
