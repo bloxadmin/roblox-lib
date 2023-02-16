@@ -221,7 +221,10 @@ export default class Analytics extends Module {
       {
         // Players
         onlineCount: Players.GetPlayers().size(),
-        players: (Players.GetChildren() as Player[]).map((p) => p.UserId),
+        players: (Players.GetChildren() as Player[]).map((p) => ({
+          id: p.UserId,
+          name: p.Name,
+        })),
       },
       10, // High priority as this is used to check if the server is still alive
     );
@@ -323,6 +326,7 @@ export default class Analytics extends Module {
     const joinData = player.GetJoinData();
 
     this.send("playerJoin", this.getPlayerSegments(player), {
+      name: player.Name,
       sourceGameId: joinData.SourceGameId !== undefined ? joinData.SourceGameId : undefined,
       sourcePlaceId: joinData.SourcePlaceId !== undefined ? joinData.SourcePlaceId : undefined,
       partyMembers: joinData.Members?.map((m) => m) || [],
