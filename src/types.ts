@@ -24,7 +24,11 @@ export interface Config {
   api: {
     base: string;
     loggingLevel: Enum.AnalyticsLogLevel;
-    loggingHandlers: string[] | false;
+    loggingHandlers:
+      | {
+          [key: string]: Enum.AnalyticsLogLevel;
+        }
+      | false;
     DEBUGGING_ONLY_runInStudio: boolean;
   };
   events: {
@@ -63,6 +67,8 @@ export enum EventType {
   RemoteConfig = 2,
   Actions = 3,
   Moderation = 4,
+  Shutdown = 5,
+  Chat = 6,
 }
 
 export interface PlayerReadyData {

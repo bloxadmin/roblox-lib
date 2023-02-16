@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG } from "consts";
 import Analytics from "modules/Analytics";
 import DebugUI from "modules/DebugUI";
 import RemoteConfig from "modules/RemoteConfig";
+import Shutdown from "modules/Shutdown";
 import { Config, InitConfig } from "types";
 
 export type InitBloxAdmin = (apiKey?: string, config?: InitConfig) => BloxAdmin;
@@ -89,6 +90,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.loadModule(new Analytics(this));
     this.loadModule(new DebugUI(this));
     this.loadModule(new RemoteConfig(this));
+    this.loadModule(new Shutdown(this));
 
     this.messenger.on("message", (message) => {
       this.logger.info(`Received message: ${HttpService.JSONEncode(message)}`);

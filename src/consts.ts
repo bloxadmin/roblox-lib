@@ -1,6 +1,6 @@
 import { Config } from "types";
 
-export const BLOXADMIN_VERSION = 105;
+export const BLOXADMIN_VERSION = 106;
 
 export const DEFAULT_CONFIG: Config = {
   api: {
@@ -29,6 +29,6 @@ export const DEFAULT_CONFIG: Config = {
     heartbeat: 15,
     playerCursors: 0,
     playerPositions: 0,
-    stats: 10,
+    stats: 13,
   },
 };
