@@ -1,4 +1,3 @@
-import { Workspace } from "@rbxts/services";
 import { BloxAdmin } from "BloxAdmin";
 import { BLOXADMIN_VERSION, DEFAULT_CONFIG } from "consts";
 import { Module } from "Module";
@@ -10,7 +9,8 @@ const Players = game.GetService("Players");
 const RunService = game.GetService("RunService");
 const ScriptContext = game.GetService("ScriptContext");
 const StatsService = game.GetService("Stats");
-const StarterPlayer = game.GetService("StarterPlayer");
+const LocalizationService = game.GetService("LocalizationService");
+const PolicyService = game.GetService("PolicyService");
 
 export default class Analytics extends Module {
   playerJoinTimes: Record<number, number> = {};
@@ -19,23 +19,8 @@ export default class Analytics extends Module {
   constructor(admin: BloxAdmin) {
     super("Analytics", admin);
 
-    this.playerReadyEvent = new Instance("RemoteEvent");
-    this.playerReadyEvent.Name = "AnalyticsPlayerReadyEvent";
-    this.playerReadyEvent.Parent = this.admin.eventsFolder;
-
-    const analyticsLocal = script.Parent?.WaitForChild("AnalyticsLocal");
-
-    if (analyticsLocal) {
-      analyticsLocal.Name = `BloxAdmin${analyticsLocal.Name}`;
-      analyticsLocal.Parent = StarterPlayer.WaitForChild("StarterPlayerScripts");
-
-      // Give script to all players that have already joined
-      Players.GetPlayers().forEach((player) => {
-        const clone = analyticsLocal.Clone();
-
-        clone.Parent = player.WaitForChild("PlayerGui");
-      });
-    }
+    this.playerReadyEvent = this.admin.createEvent("AnalyticsPlayerReadyEvent");
+    this.admin.loadLocalScript(script.Parent?.WaitForChild("AnalyticsLocal"));
   }
 
   enable(): void {
@@ -331,6 +316,8 @@ export default class Analytics extends Module {
       sourcePlaceId: joinData.SourcePlaceId !== undefined ? joinData.SourcePlaceId : undefined,
       partyMembers: joinData.Members?.map((m) => m) || [],
       teleportData: joinData.TeleportData,
+      countryCode: LocalizationService.GetCountryRegionForPlayerAsync(player),
+      policy: PolicyService.GetPolicyInfoForPlayerAsync(player),
     });
   }
 

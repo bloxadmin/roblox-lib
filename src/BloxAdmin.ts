@@ -5,12 +5,15 @@ import RemoteMessaging from "RemoteMessaging";
 import { DEFAULT_CONFIG } from "consts";
 import Analytics from "modules/Analytics";
 import DebugUI from "modules/DebugUI";
+import Moderation from "modules/Moderation";
 import RemoteConfig from "modules/RemoteConfig";
 import Shutdown from "modules/Shutdown";
 import { Config, InitConfig } from "types";
 
 export type InitBloxAdmin = (apiKey?: string, config?: InitConfig) => BloxAdmin;
 
+const Players = game.GetService("Players");
+const StarterPlayer = game.GetService("StarterPlayer");
 const HttpService = game.GetService("HttpService");
 const RunService = game.GetService("RunService");
 
@@ -20,6 +23,14 @@ function uuid() {
     const v = (c === "x" && math.random(8, 0xf)) || math.random(8, 0xb);
     return string.format("%x", v);
   })[0];
+}
+
+interface Services {
+  Analytics: Analytics;
+  DebugUI: DebugUI;
+  RemoteConfig: RemoteConfig;
+  Shutdown: Shutdown;
+  Moderation: Moderation;
 }
 
 export class BloxAdmin extends EventEmitter<{ ready: [] }> {
@@ -91,6 +102,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.loadModule(new DebugUI(this));
     this.loadModule(new RemoteConfig(this));
     this.loadModule(new Shutdown(this));
+    this.loadModule(new Moderation(this));
 
     this.messenger.on("message", (message) => {
       this.logger.info(`Received message: ${HttpService.JSONEncode(message)}`);
@@ -163,12 +175,20 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.emit("ready");
   }
 
+  GetService<T extends keyof Services>(className: T): Services[T] {
+    return this.modules[className] as Services[T];
+  }
+
   getAnalytics(): Analytics {
-    return this.modules["Analytics"] as Analytics;
+    return this.GetService("Analytics");
   }
 
   getRemoteConfig(): RemoteConfig {
-    return this.modules["RemoteConfig"] as RemoteConfig;
+    return this.GetService("RemoteConfig");
+  }
+
+  getModeration(): Moderation {
+    return this.GetService("Moderation");
   }
 
   loadModule<M extends Module>(mod: M) {
@@ -194,6 +214,28 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
 
   endPlayerSession(playerId: number) {
     this.sessionIds[playerId] = undefined;
+  }
+
+  loadLocalScript(s?: Instance) {
+    if (!s) return;
+
+    s.Name = `BloxAdmin${s.Name}`;
+    s.Parent = StarterPlayer.WaitForChild("StarterPlayerScripts");
+
+    // Give script to all players that have already joined
+    Players.GetPlayers().forEach((player) => {
+      const clone = s.Clone();
+
+      clone.Parent = player.WaitForChild("PlayerGui");
+    });
+  }
+
+  createEvent<C extends Callback = Callback>(name: string): RemoteEvent<C> {
+    const event = new Instance("RemoteEvent");
+    event.Name = "AnalyticsPlayerReadyEvent";
+    event.Parent = this.eventsFolder;
+
+    return event;
   }
 }
 
