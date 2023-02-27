@@ -8,7 +8,7 @@ import DebugUI from "modules/DebugUI";
 import Moderation from "modules/Moderation";
 import RemoteConfig from "modules/RemoteConfig";
 import Shutdown from "modules/Shutdown";
-import { Config, InitConfig } from "types";
+import { Config, EventType, InitConfig } from "types";
 
 export type InitBloxAdmin = (apiKey?: string, config?: InitConfig) => BloxAdmin;
 
@@ -36,7 +36,7 @@ interface Services {
 export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   config: Config;
   logger: Logger;
-  readonly messenger: RemoteMessaging<[number, ...unknown[]]>;
+  readonly messenger: RemoteMessaging<[EventType, ...unknown[]]>;
   readonly eventsFolder: Folder;
   private sessionIds: Record<number, string | undefined>;
   private modules: Record<string, Module>;
@@ -162,13 +162,12 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   }
 
   start(apiKey: string) {
-    this.messenger.apiKey = apiKey;
-
     if (this.started) return;
     this.started = true;
 
-    this.messenger.connectEmitter();
-    this.messenger.connectRemote();
+    this.messenger.connectLocalEmitter();
+    this.messenger.connectGlobalEmitter();
+    this.messenger.connectRemote(apiKey);
 
     this.logger.info("Ready");
 

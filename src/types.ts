@@ -102,6 +102,10 @@ export interface PlayerReadyData {
   gui: {
     isTenFootInterface: boolean;
   };
+  localization: {
+    countryCode: string;
+  };
+  policy: PolicyInfo;
 }
 
 export enum MessageType {

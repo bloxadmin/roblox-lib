@@ -49,12 +49,9 @@ export default class Analytics extends Module {
       return;
     }
 
-    const [success, e] = this.admin.messenger.sendRemote(
-      [EventType.Analytics, name, os.time(), segments, data],
-      priority,
-    );
-
-    if (!success) this.logger.error(`Error sending event (${name}):`, tostring(e));
+    this.admin.messenger.sendRemote([EventType.Analytics, name, os.time(), segments, data], priority).catch((e) => {
+      this.logger.error(`Error sending event (${name}):`, tostring(e));
+    });
   }
 
   private setupPlayer(player: Player) {

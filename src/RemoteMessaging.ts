@@ -1,8 +1,9 @@
-import EventEmitter, { Event } from "EventEmitter";
+import EventEmitter from "EventEmitter";
 import Logger from "Logger";
+import { BLOXADMIN_VERSION } from "consts";
+import PromiseQueue from "messaging/PromiseQueue";
 import { Config } from "types";
 
-const MemoryStoreService = game.GetService("MemoryStoreService");
 const HttpService = game.GetService("HttpService");
 const RunService = game.GetService("RunService");
 
@@ -27,23 +28,37 @@ interface RemoteResponse<M> {
   global: M[];
 }
 
-export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message: [M]; connect: [] }> {
+enum Queue {
+  Global = "global",
+  Local = "local",
+  Remote = "remote",
+}
+
+export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message: [M]; global: [M]; connect: [] }> {
   public readonly name: string;
   public readonly localId: string;
   public readonly runMode: string;
   public url: string;
-  public apiKey?: string;
+  private apiKey?: string;
   public config: Config;
   public readonly logger?: Logger;
 
   private remoteOptions?: RemoteOptions;
   private remoteOptionsResolvers: Array<(options: RemoteOptions) => void> = [];
+  private remoteAuthListener?: RBXScriptConnection;
 
-  private listeningLocal = false;
-  private listeningRemote = false;
-  private globalQueue: MemoryStoreQueue;
-  private localQueue: MemoryStoreQueue;
-  private remoteQueue: MemoryStoreQueue;
+  private readonly listening: {
+    [key in Queue]: boolean;
+  } = {
+    local: false,
+    global: false,
+    remote: false,
+  };
+  private readonly queues: {
+    [Queue.Local]: PromiseQueue<M>;
+    [Queue.Global]: PromiseQueue<M>;
+    [Queue.Remote]: PromiseQueue<[string, M]>;
+  };
 
   constructor({
     name,
@@ -75,14 +90,18 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
       .filter((m) => m.size() > 1)
       .join(",");
 
-    this.globalQueue = MemoryStoreService.GetQueue(`${QUEUE_PREFIX}${GLOBAL_QUEUE}.${tostring(name)}`);
-    this.localQueue = MemoryStoreService.GetQueue(
-      `${QUEUE_PREFIX}${LOCAL_QUEUE}.${tostring(name)}.${tostring(localId)}`,
-    );
-    this.remoteQueue = MemoryStoreService.GetQueue(`${QUEUE_PREFIX}${GLOBAL_REMOTE_QUEUE}.${tostring(name)}`);
+    this.queues = {
+      global: new PromiseQueue(`${QUEUE_PREFIX}${GLOBAL_QUEUE}.${tostring(name)}`),
+      local: new PromiseQueue(`${QUEUE_PREFIX}${LOCAL_QUEUE}.${tostring(name)}.${tostring(localId)}`),
+      remote: new PromiseQueue(`${QUEUE_PREFIX}${GLOBAL_REMOTE_QUEUE}.${tostring(name)}`),
+    };
   }
 
-  public serverStop() {
+  public setApiKey(apiKey: string) {
+    this.apiKey = apiKey;
+  }
+
+  public async serverStop() {
     if (RunService.IsStudio() && !this.config.api.DEBUGGING_ONLY_runInStudio) {
       this.logger?.debug("Skipping flush on studio stop");
       return;
@@ -93,70 +112,72 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     let result = 100;
     let count = -10;
     while (result === 100 && count < 0) {
-      result = this.processRemoteEvents();
+      result = await this.processRemoteEvents();
       count++;
     }
   }
 
-  public sendRemote(message: M, priority = 0, expiresIn = 3600) {
+  public async sendRemote(message: M, priority = 0, expiresIn = 3600) {
     this.logger?.verbose("Sending remote message:", HttpService.JSONEncode(message));
-    return pcall(() => {
-      const size = HttpService.JSONEncode(message).size();
-      if (size > 9000) {
-        this.logger?.warn("Message size is too large", `${size} > 9000`);
-        return false;
-      }
 
-      this.remoteQueue.AddAsync([this.localId, message], expiresIn, priority);
-      return true;
-    });
+    const size = HttpService.JSONEncode(message).size();
+    if (size > 9000) {
+      error(`Message size is too large. ${size} > 9000`);
+    }
+
+    if (!message) return;
+
+    await this.queues.remote.add([this.localId, message as M], expiresIn, priority);
   }
 
-  public sendLocal(message: M, id: string, priority = 0, expiresIn = 3600) {
+  public async sendLocal(message: M, id: string, priority = 0, expiresIn = 3600) {
     this.logger?.verbose("Sending local message:", HttpService.JSONEncode(message));
-    return pcall(() => {
-      if (id === this.localId) {
-        this.localQueue.AddAsync(message, expiresIn, priority);
-      } else {
-        const queue = MemoryStoreService.GetQueue(`${QUEUE_PREFIX}${LOCAL_QUEUE}.${id}`);
-        queue.AddAsync(message, expiresIn, priority);
-      }
-      return true;
-    });
+
+    if (id === this.localId) {
+      await this.queues.local.add(message, expiresIn, priority);
+    } else {
+      const queue = new PromiseQueue(`${QUEUE_PREFIX}${LOCAL_QUEUE}.${id}`);
+      await queue.add(message, expiresIn, priority);
+    }
   }
 
-  public sendGlobal(message: M, priority = 0, expiresIn = 3600) {
+  public async sendGlobal(message: M, priority = 0, expiresIn = 3600) {
     this.logger?.verbose("Sending global message", HttpService.JSONEncode(message));
-    return pcall(() => {
-      this.globalQueue.AddAsync(message, expiresIn, priority);
-      return true;
-    });
+
+    await this.queues.global.add(message, expiresIn, priority);
   }
 
-  public readAndConsumeLocal(callback: (message: M[]) => boolean, count = 1) {
-    this.logger?.verbose("Reading and consuming local messages");
-    const result = pcall<[RemoteMessaging<M>], LuaTuple<[items: M[], id: string]>>((remoteMessaging) => {
-      return remoteMessaging.localQueue.ReadAsync(count, false, -1) as LuaTuple<[M[], string]>;
-    }, this);
-    const [readSuccess] = result;
-    if (!readSuccess) return;
-    const [_, messages, removeId] = result as LuaTuple<[boolean, M[], string]>;
-    this.logger?.verbose(`Got Message:`, HttpService.JSONEncode(messages));
-    this.logger?.verbose(`Delete Id: ${removeId}`);
-    const success = pcall<[M[], (message: M[]) => boolean], boolean>((m, cb) => cb(m), messages, callback);
-    if (!success[0] || !success[1]) return;
-    pcall(() => {
-      this.localQueue.RemoveAsync(removeId);
-    });
+  public readAndConsume(queue: Queue, callback: (message: M[]) => boolean, count = 1) {
+    if (queue === Queue.Remote) error("Cannot read and consume remote queue", 1);
+
+    this.logger?.verbose(`Reading and consuming ${queue} messages`);
+
+    return this.queues[queue]
+      .read(count, false, -1)
+      .then(([messages, removeId]) => {
+        this.logger?.verbose(`Got Message:`, HttpService.JSONEncode(messages));
+        this.logger?.verbose(`Delete Id: ${removeId}`);
+
+        const success = pcall<[M[], (message: M[]) => boolean], boolean>((m, cb) => cb(m), messages, callback);
+        if (!success[0] || !success[1]) return;
+
+        this.queues[queue].remove(removeId).catch((err) => {
+          this.logger?.error("Failed to remove message from queue", err);
+        });
+      })
+      .catch((err) => {
+        this.logger?.error("Failed to read and consume message", err);
+      });
   }
 
-  public listenConsomeLocal(callback: (message: M) => void | boolean) {
-    this.logger?.debug("Listening for local messages");
-    if (this.listeningLocal) error("Already listening", 1);
-    this.listeningLocal = true;
-    spawn(() => {
-      while (this.listeningLocal) {
-        this.readAndConsumeLocal((messages) => {
+  public listenConsome(queue: Queue, callback: (message: M) => void | boolean) {
+    this.logger?.debug(`Listening for ${queue} messages`);
+    if (this.listening[queue]) error(`Already listening to ${queue}`, 1);
+    this.listening[queue] = true;
+    spawn(async () => {
+      while (this.listening[queue]) {
+        const startAt = time();
+        await this.readAndConsume(queue, (messages) => {
           const result = pcall(() => {
             let success = true;
             for (const message of messages) {
@@ -172,6 +193,8 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
 
           return result[0] && result[1];
         });
+        const took = time() - startAt;
+        wait(math.max(0, 0.1 - took));
       }
     });
   }
@@ -183,16 +206,21 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     });
   }
 
+  private reqHeaders(): Record<string, string> {
+    return {
+      Authorization: `Bearer ${this.apiKey}`,
+      Accept: "application/json",
+      "x-roblox-mode": this.runMode,
+      "x-bloxadmin-version": tostring(BLOXADMIN_VERSION),
+    };
+  }
+
   public fetchRemoteOptions(): RemoteOptions | undefined {
     this.logger?.sub("fetchRemoteOptions()").debug(`GETTING FROM "${this.url}"`);
     const result = pcall<[], RequestAsyncResponse>(() => {
       return HttpService.RequestAsync({
         Method: "GET",
-        Headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          Accept: "application/json",
-          "x-roblox-mode": this.runMode,
-        },
+        Headers: this.reqHeaders(),
         Url: this.url,
       });
     });
@@ -221,33 +249,22 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     return options;
   }
 
-  flushAndPollRemote(): [number, RemoteResponse<M> | undefined] {
+  async flushAndPollRemote(): Promise<[number, RemoteResponse<M>]> {
     if (!this.remoteOptions) {
       const options = this.fetchRemoteOptions();
 
       if (!options) {
-        this.logger?.warn(`Failed to fetch remote options for remote messaging (${this.url}): ${this.name}`);
-        return [-1, undefined];
+        error(`Failed to fetch remote options for remote messaging (${this.url}): ${this.name}`);
       }
 
       this.remoteOptions = options;
     }
 
-    const queueResult = pcall<[RemoteMessaging<M>], LuaTuple<[items: M[], id: string]>>((remoteMessaging) => {
-      // We only want to send a max of 300 events at a time as to not go over the 1MB limit
-      // Each message has a max of 9.9KB
-      return remoteMessaging.remoteQueue.ReadAsync(100, false, this.config.intervals.ingest) as LuaTuple<[M[], string]>;
-    }, this);
+    const [messages, removeId] = await this.queues.remote.read(100, false, this.config.intervals.ingest);
 
-    // Fetching messages from queue failed
-    if (!(queueResult as LuaTuple<[boolean, unknown]>)[0]) {
-      this.logger?.warn(
-        `Failed to fetch messages from remote queue: ${tostring((queueResult as LuaTuple<[boolean, unknown]>)[1])}`,
-      );
-      return [0, undefined];
+    if (messages && messages.size()) {
+      this.logger?.verbose("Sending remote messages:", HttpService.JSONEncode(messages));
     }
-
-    const [, messages, removeId] = queueResult as LuaTuple<[boolean, M[] | undefined, string | undefined]>;
 
     const postBody = {
       messages: messages || [],
@@ -256,11 +273,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     const remoteResult = pcall<[], RequestAsyncResponse>(() => {
       return HttpService.RequestAsync({
         Method: "POST",
-        Headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          Accept: "application/json",
-          "x-roblox-mode": this.runMode,
-        },
+        Headers: this.reqHeaders(),
         Url: `${this.remoteOptions!.url}`,
         Body: HttpService.JSONEncode(postBody),
       });
@@ -268,32 +281,17 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
 
     // Posting messages to remote failed
     if (!remoteResult[0]) {
-      this.logger?.warn("Failed to post messages to remote: request failed");
-      return [0, undefined];
+      error("Failed to post messages to remote: request failed");
     }
 
     const [__, response] = remoteResult as LuaTuple<[boolean, RequestAsyncResponse]>;
 
     if (response.StatusCode !== 200) {
-      this.logger?.warn("Failed to post messages to remote: invalid response");
-      return [0, undefined];
+      error("Failed to post messages to remote: invalid response");
     }
 
     if (removeId) {
-      const success = pcall<[string, RemoteMessaging<M>], boolean>(
-        (id, remoteMessaging) => {
-          remoteMessaging.remoteQueue.RemoveAsync(id);
-          return true;
-        },
-        removeId,
-        this,
-      );
-
-      if (!success[0] || !success[1]) {
-        this.logger?.warn(
-          `Failed to remove messages from remote queue (${tostring(removeId)}): ${tostring(success[1])}`,
-        );
-      }
+      await this.queues.remote.remove(removeId);
     }
 
     const body = HttpService.JSONDecode(response.Body) as RemoteResponse<M>;
@@ -301,19 +299,26 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     return [postBody.messages.size(), body];
   }
 
-  public connectEmitter() {
-    this.logger?.debug("Connecting emitter");
-    this.listenConsomeLocal((m) => {
-      return this.emit("message", m);
+  public connectLocalEmitter() {
+    this.logger?.debug("Connecting local emitter");
+    this.waitForRemoteOptions().then(() => {
+      this.listenConsome(Queue.Local, (m) => {
+        return this.emit("message", m);
+      });
     });
   }
 
-  public processRemoteEvents(): number {
-    const [queueProcessed, result] = this.flushAndPollRemote();
+  public connectGlobalEmitter() {
+    this.logger?.debug("Connecting global emitter");
+    this.waitForRemoteOptions().then(() => {
+      this.listenConsome(Queue.Global, (m) => {
+        return this.emit("global", m);
+      });
+    });
+  }
 
-    if (!result || queueProcessed === -1) {
-      return -1;
-    }
+  public async processRemoteEvents(): Promise<number> {
+    const [queueProcessed, result] = await this.flushAndPollRemote();
 
     if (!result.success) {
       this.logger?.warn("Ingest unsuccessful, no clue what's wrong though");
@@ -324,50 +329,63 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     // eslint-disable-next-line roblox-ts/no-array-pairs
     for (const [key, messages] of pairs(locals)) {
       for (const message of messages) {
-        this.sendLocal(message, key as string);
+        this.sendLocal(message, key as string).catch((err) => {
+          this.logger?.error("Failed to send local message", err);
+        });
       }
     }
 
     for (const message of global) {
-      this.sendGlobal(message);
+      this.sendGlobal(message).catch((err) => {
+        this.logger?.error("Failed to send global message", err);
+      });
     }
 
     return queueProcessed;
   }
 
-  public connectRemote() {
-    this.logger?.debug("Connecting remote");
-    if (this.listeningRemote) error("Already listening", 1);
-    this.listeningRemote = true;
-    spawn(() => {
-      while (this.listeningRemote) {
-        const startAt = time();
-        const result = this.processRemoteEvents();
-        const took = time() - startAt;
+  public connectRemote(apiKey: string) {
+    this.apiKey = apiKey;
 
-        if (result === -1) {
-          const toWait = this.config.intervals.ingestRetry - took;
-          this.logger?.verbose(`Ingest FAILED taking ${took} seconds, waiting ${toWait} seconds`);
+    this.logger?.debug("Connecting remote");
+
+    if (this.listening.remote) error("Already listening", 1);
+    this.listening.remote = true;
+
+    this.connectRemoteLoop();
+  }
+
+  private connectRemoteLoop() {
+    this.logger?.debug(">>>>>>>> Starting remote loop");
+
+    spawn(async () => {
+      while (this.listening.remote) {
+        const startAt = time();
+        let success = false;
+        try {
+          success = (await this.processRemoteEvents()) >= 0;
+        } finally {
+          const took = time() - startAt;
+          let toWait = this.config.intervals.ingest - took;
+
+          if (success) {
+            this.logger?.verbose(`Ingest took ${took} seconds, waiting ${toWait} seconds`);
+          } else {
+            toWait = this.config.intervals.ingestRetry - took;
+            this.logger?.verbose(`Ingest FAILED taking ${took} seconds, waiting ${toWait} seconds`);
+          }
+
           if (toWait >= MIN_ROBLOX_WAIT) {
             wait(toWait);
           }
-
-          continue;
-        }
-
-        const toWait = this.config.intervals.ingest - took;
-
-        this.logger?.verbose(`Ingest took ${took} seconds, waiting ${toWait} seconds`);
-
-        if (toWait >= MIN_ROBLOX_WAIT) {
-          wait(toWait);
         }
       }
     });
   }
 
   public stopListening() {
-    this.listeningLocal = false;
-    this.listeningRemote = false;
+    this.listening.global = false;
+    this.listening.local = false;
+    this.listening.remote = false;
   }
 }

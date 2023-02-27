@@ -5,6 +5,9 @@ const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const UserInputService = game.GetService("UserInputService");
 const UserGameSettings = UserSettings().GetService("UserGameSettings");
 const GuiService = game.GetService("GuiService");
+const LocalizationService = game.GetService("LocalizationService");
+const PolicyService = game.GetService("PolicyService");
+const Players = game.GetService("Players");
 
 const playerReadyEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitForChild(
   "AnalyticsPlayerReadyEvent",
@@ -12,6 +15,8 @@ const playerReadyEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitF
 
 delay(3, () => {
   const CurrentCamera = Workspace.CurrentCamera;
+
+  const player = Players.LocalPlayer;
 
   const data: PlayerReadyData = {
     input: {
@@ -46,6 +51,10 @@ delay(3, () => {
     gui: {
       isTenFootInterface: GuiService.IsTenFootInterface(),
     },
+    localization: {
+      countryCode: LocalizationService.GetCountryRegionForPlayerAsync(player),
+    },
+    policy: PolicyService.GetPolicyInfoForPlayerAsync(player),
   };
 
   playerReadyEvent.FireServer(data);
