@@ -76,8 +76,6 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.eventsFolder.Name = "BloxAdminEvents";
     this.eventsFolder.Parent = game.GetService("ReplicatedStorage");
 
-    print("Events folder:", this.eventsFolder);
-
     this.logger = new Logger(
       "BloxAdmin",
       this.config.api.loggingLevel ||

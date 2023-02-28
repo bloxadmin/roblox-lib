@@ -340,8 +340,6 @@ export default class Analytics extends Module {
   sendPlayerReadyEvent(player: Player, data: PlayerReadyData) {
     if (this.eventDisallowed("playerReady", ["auto", "player"])) return;
 
-    print("Sending player ready event");
-
     this.send("playerReady", this.getPlayerSegments(player), data);
   }
 
