@@ -1,4 +1,4 @@
-export type AutoIntervalEvents = "stats" | "playerPosition";
+export type AutoIntervalEvents = "stats" | "playerPosition" | "memoryStoreServiceQuotaUsage";
 export type MarketplaceEvents =
   | "marketplaceBundlePurchaseFinished"
   | "marketplaceGamePassPurchaseFinished"
@@ -14,8 +14,7 @@ export type AutoEvents =
   | "serverOpen"
   | "serverClose"
   | "consoleLog"
-  | "scriptError"
-  | "stats";
+  | "scriptError";
 export type CustomPlayerEvents = "playerTextInput" | "playerTrigger" | "playerLocationTrigger";
 export type CustomEvents = CustomPlayerEvents | "trigger" | "locationTrigger";
 export type Event = AutoEvents | CustomEvents;

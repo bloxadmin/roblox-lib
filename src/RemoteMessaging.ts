@@ -34,7 +34,22 @@ enum Queue {
   Remote = "remote",
 }
 
-export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message: [M]; global: [M]; connect: [] }> {
+let memoryQuotaUsage = 0;
+
+export function resetMemoryQuotaUsage() {
+  memoryQuotaUsage = 0;
+}
+
+export function getMemoryQuotaUsage(): number {
+  return memoryQuotaUsage;
+}
+
+export default class RemoteMessaging<M = unknown> extends EventEmitter<{
+  message: [M];
+  global: [M];
+  local: [M];
+  connect: [];
+}> {
   public readonly name: string;
   public readonly localId: string;
   public readonly runMode: string;
@@ -128,6 +143,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     if (!message) return;
 
     await this.queues.remote.add([this.localId, message as M], expiresIn, priority);
+    memoryQuotaUsage++;
   }
 
   public async sendLocal(message: M, id: string, priority = 0, expiresIn = 3600) {
@@ -135,9 +151,11 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
 
     if (id === this.localId) {
       await this.queues.local.add(message, expiresIn, priority);
+      memoryQuotaUsage++;
     } else {
       const queue = new PromiseQueue(`${QUEUE_PREFIX}${LOCAL_QUEUE}.${id}`);
       await queue.add(message, expiresIn, priority);
+      memoryQuotaUsage++;
     }
   }
 
@@ -145,6 +163,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     this.logger?.verbose("Sending global message", HttpService.JSONEncode(message));
 
     await this.queues.global.add(message, expiresIn, priority);
+    memoryQuotaUsage++;
   }
 
   public readAndConsume(queue: Queue, callback: (message: M[]) => boolean, count = 1) {
@@ -155,6 +174,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     return this.queues[queue]
       .read(count, false, -1)
       .then(([messages, removeId]) => {
+        memoryQuotaUsage += math.max(1, messages.size());
         this.logger?.verbose(`Got Message:`, HttpService.JSONEncode(messages));
         this.logger?.verbose(`Delete Id: ${removeId}`);
 
@@ -261,6 +281,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     }
 
     const [messages, removeId] = await this.queues.remote.read(100, false, this.config.intervals.ingest);
+    memoryQuotaUsage += math.max(1, messages.size());
 
     if (messages && messages.size()) {
       this.logger?.verbose("Sending remote messages:", HttpService.JSONEncode(messages));
@@ -303,7 +324,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     this.logger?.debug("Connecting local emitter");
     this.waitForRemoteOptions().then(() => {
       this.listenConsome(Queue.Local, (m) => {
-        return this.emit("message", m);
+        return this.emit("message", m) && this.emit("local", m);
       });
     });
   }
@@ -312,7 +333,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{ message
     this.logger?.debug("Connecting global emitter");
     this.waitForRemoteOptions().then(() => {
       this.listenConsome(Queue.Global, (m) => {
-        return this.emit("global", m);
+        return this.emit("message", m) && this.emit("global", m);
       });
     });
   }

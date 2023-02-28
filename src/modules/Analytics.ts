@@ -540,6 +540,18 @@ export default class Analytics extends Module {
     });
   }
 
+  sendMemoryStoreServiceQuotaUsageEvent(usage: number) {
+    if (this.eventDisallowed("memoryStoreServiceQuotaUsage", ["auto", "intervals"])) return;
+
+    this.send(
+      "memoryStoreServiceQuotaUsage",
+      {},
+      {
+        usage,
+      },
+    );
+  }
+
   /**
    * Sends the StatsEvent to the injestor.
    *

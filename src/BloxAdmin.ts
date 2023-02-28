@@ -3,6 +3,7 @@ import Logger from "Logger";
 import { Module } from "Module";
 import RemoteMessaging from "RemoteMessaging";
 import { DEFAULT_CONFIG } from "consts";
+import Actions from "modules/Actions";
 import Analytics from "modules/Analytics";
 import DebugUI from "modules/DebugUI";
 import Moderation from "modules/Moderation";
@@ -31,6 +32,7 @@ interface Services {
   RemoteConfig: RemoteConfig;
   Shutdown: Shutdown;
   Moderation: Moderation;
+  Actions: Actions;
 }
 
 export class BloxAdmin extends EventEmitter<{ ready: [] }> {
@@ -99,10 +101,11 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.logger.verbose("Loading config:", tostring(this.config));
 
     this.loadModule(new Analytics(this));
-    this.loadModule(new DebugUI(this));
     this.loadModule(new RemoteConfig(this));
     this.loadModule(new Shutdown(this));
     this.loadModule(new Moderation(this));
+    this.loadModule(new Actions(this));
+    this.loadModule(new DebugUI(this));
 
     this.messenger.on("message", (message) => {
       this.logger.info(`Received message: ${HttpService.JSONEncode(message)}`);
@@ -188,6 +191,10 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
 
   getModeration(): Moderation {
     return this.GetService("Moderation");
+  }
+
+  getActions(): Actions {
+    return this.GetService("Actions");
   }
 
   loadModule<M extends Module>(mod: M) {

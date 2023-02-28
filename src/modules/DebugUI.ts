@@ -1,5 +1,6 @@
 import { BloxAdmin } from "BloxAdmin";
 import { Module } from "Module";
+import { getMemoryQuotaUsage, resetMemoryQuotaUsage } from "RemoteMessaging";
 import { BLOXADMIN_VERSION } from "consts";
 
 const Players = game.GetService("Players");
@@ -7,10 +8,14 @@ const Players = game.GetService("Players");
 const ADMIN_IDS = [50180001, 2780487836];
 
 export default class DebugUI extends Module {
+  private lastQuotaReset = os.time() - 60;
   private debugUI?: ScreenGui;
+  private textLabels: TextLabel[];
 
   constructor(admin: BloxAdmin) {
     super("DebugUI", admin);
+
+    this.textLabels = [];
   }
 
   enable(): void {
@@ -27,6 +32,24 @@ export default class DebugUI extends Module {
 
       this.givePlayerDebugUI(player);
     });
+
+    spawn(() => {
+      while (true) {
+        if (math.floor(os.time() / 60) > math.floor(this.lastQuotaReset / 60) + 1) {
+          this.admin.getAnalytics().sendMemoryStoreServiceQuotaUsageEvent(getMemoryQuotaUsage());
+          resetMemoryQuotaUsage();
+          this.lastQuotaReset = os.time();
+        }
+        this.textLabels.forEach((label) => {
+          if (label.Parent) label.Text = this.debugText();
+        });
+        wait(this.textLabels.size() ? 0.1 : 1);
+      }
+    });
+  }
+
+  debugText() {
+    return `BloxAdmin v${BLOXADMIN_VERSION} (${getMemoryQuotaUsage()}, ${this.lastQuotaReset})`;
   }
 
   createDebugUI(): ScreenGui {
@@ -50,7 +73,7 @@ export default class DebugUI extends Module {
     textLabel.Size = new UDim2(0, 200, 0, 16);
     textLabel.BackgroundTransparency = 1;
     textLabel.BorderSizePixel = 0;
-    textLabel.Text = "BloxAdmin v" + BLOXADMIN_VERSION;
+    textLabel.Text = this.debugText();
     textLabel.TextColor3 = Color3.fromRGB(255, 255, 255);
     textLabel.TextSize = 8;
 
@@ -65,6 +88,8 @@ export default class DebugUI extends Module {
 
       const debugUI = this.debugUI?.Clone();
       if (!debugUI) return;
+
+      this.textLabels.push(debugUI.FindFirstChild("DebugUI")?.FindFirstChild("DebugText") as TextLabel);
 
       debugUI.Parent = player.WaitForChild("PlayerGui");
       debugUI.Enabled = true;

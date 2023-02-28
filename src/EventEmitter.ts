@@ -36,13 +36,15 @@ export default class EventEmitter<E extends Events = {}> {
     return !errored;
   }
 
-  public emit<N extends keyof E>(event: N, ...args: E[N]) {
+  public emit<N extends keyof E>(event: N, ...args: E[N]): boolean {
     this.callListeners((this.listeners[event] as EventCallback<E[N]>[]) || [], event, ...args);
     this.callListeners(
       (this.listeners["*"] as EventCallback<E[N]>[]) || [],
       event,
       ...([event, ...args] as unknown as E[N]),
     );
+
+    return true;
   }
 
   public removeListener<N extends keyof E>(event: N | "*", callback: EventCallback<E[N]>) {
