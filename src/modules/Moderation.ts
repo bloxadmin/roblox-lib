@@ -141,8 +141,9 @@ export default class Moderation extends Module<{
 
   // Chat 
 
-  private isMuted(player: Player) {
-    return this.playersMutedUntil[player.UserId] && (this.playersMutedUntil[player.UserId] === -1 || this.playersMutedUntil[player.UserId] > os.time());
+  isPlayerMuted(player: Player | number) {
+    const playerId = typeIs(player, "number") ? player : player.UserId;
+    return this.playersMutedUntil[playerId] && (this.playersMutedUntil[playerId] === -1 || this.playersMutedUntil[playerId] > os.time());
   }
 
 
@@ -153,7 +154,7 @@ export default class Moderation extends Module<{
       const player = Players.GetPlayerByUserId(playerId);
       if (!player) return true;
 
-      const isMuted = this.isMuted(player);
+      const isMuted = this.isPlayerMuted(player);
 
       if (isMuted && (!this.lastNotifiedMuted[playerId] || this.lastNotifiedMuted[playerId] + NOTIFICATION_COOLDOWN < os.time())) {
         this.lastNotifiedMuted[playerId] = os.time();
@@ -161,7 +162,7 @@ export default class Moderation extends Module<{
       } else if (!isMuted && message.TextChannel && message.TextChannel.Name.sub(1, 10) === "RBXWhisper") {
         const destinationPlayer = Players.GetPlayerByUserId(destination.UserId);
         if (destinationPlayer) {
-          const destinationIsMuted = this.isMuted(destinationPlayer);
+          const destinationIsMuted = this.isPlayerMuted(destinationPlayer);
 
           if (destinationIsMuted) {
             this.systemMessageEvent.FireClient(player, "The player you are trying to whisper is muted and cannot respond.");
