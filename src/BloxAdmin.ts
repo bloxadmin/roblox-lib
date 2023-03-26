@@ -54,19 +54,19 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
 
     this.config = config
       ? {
-          api: {
-            ...DEFAULT_CONFIG.api,
-            ...(config.api || {}),
-          },
-          events: {
-            ...DEFAULT_CONFIG.events,
-            ...(config.events || {}),
-          },
-          intervals: {
-            ...DEFAULT_CONFIG.intervals,
-            ...(config.intervals || {}),
-          },
-        }
+        api: {
+          ...DEFAULT_CONFIG.api,
+          ...(config.api || {}),
+        },
+        events: {
+          ...DEFAULT_CONFIG.events,
+          ...(config.events || {}),
+        },
+        intervals: {
+          ...DEFAULT_CONFIG.intervals,
+          ...(config.intervals || {}),
+        },
+      }
       : DEFAULT_CONFIG;
     this.sessionIds = {};
     this.modules = {};
@@ -79,7 +79,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.logger = new Logger(
       "BloxAdmin",
       this.config.api.loggingLevel ||
-        (RunService.IsStudio() ? Enum.AnalyticsLogLevel.Information : Enum.AnalyticsLogLevel.Warning),
+      (RunService.IsStudio() ? Enum.AnalyticsLogLevel.Information : Enum.AnalyticsLogLevel.Warning),
       this.config.api.loggingHandlers,
     );
     if (!this.config.api.loggingLevel && RunService.IsStudio()) {
@@ -236,7 +236,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
 
   createEvent<C extends Callback = Callback>(name: string): RemoteEvent<C> {
     const event = new Instance("RemoteEvent");
-    event.Name = "AnalyticsPlayerReadyEvent";
+    event.Name = name;
     event.Parent = this.eventsFolder;
 
     return event;

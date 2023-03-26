@@ -7,7 +7,7 @@ export const DEFAULT_CONFIG: Config = {
     DEBUGGING_ONLY_runInStudio: false,
     base: "https://api.bloxadmin.com",
     loggingLevel: Enum.AnalyticsLogLevel.Fatal,
-    loggingHandlers: false,
+    loggingHandlers: undefined,
   },
   events: {
     disableIntervals: false,

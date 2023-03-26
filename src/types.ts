@@ -24,10 +24,10 @@ export interface Config {
     base: string;
     loggingLevel: Enum.AnalyticsLogLevel;
     loggingHandlers:
-      | {
-          [key: string]: Enum.AnalyticsLogLevel;
-        }
-      | false;
+    | {
+      [key: string]: Enum.AnalyticsLogLevel;
+    }
+    | undefined;
     DEBUGGING_ONLY_runInStudio: boolean;
   };
   events: {

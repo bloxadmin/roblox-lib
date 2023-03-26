@@ -2,8 +2,8 @@ export default class Logger {
   constructor(
     public readonly name: string,
     public level: Enum.AnalyticsLogLevel,
-    public handlers: { [key: string]: Enum.AnalyticsLogLevel } | false,
-  ) {}
+    public handlers: { [key: string]: Enum.AnalyticsLogLevel } | undefined,
+  ) { }
 
   public fatal(...msgs: string[]) {
     this.log(Enum.AnalyticsLogLevel.Fatal, ...msgs);
@@ -30,41 +30,42 @@ export default class Logger {
   }
 
   public log(level: Enum.AnalyticsLogLevel, ...msgs: string[]) {
-    const loggerLevel = this.handlers && this.handlers[this.name] ? this.handlers[this.name] : level;
+    const loggerLevel = this.handlers?.[this.name] || this.level;
 
-    if (loggerLevel.Value <= level.Value) {
-      let levelName = "";
-      switch (level) {
-        case Enum.AnalyticsLogLevel.Fatal:
-          levelName = "FATAL";
-          break;
-        case Enum.AnalyticsLogLevel.Error:
-          levelName = "ERROR";
-          break;
-        case Enum.AnalyticsLogLevel.Warning:
-          levelName = "WARN";
-          break;
-        case Enum.AnalyticsLogLevel.Debug:
-          levelName = "DEBUG";
-          break;
-        case Enum.AnalyticsLogLevel.Trace:
-          levelName = "VERBOSE";
-          break;
-        default:
-          levelName = "INFO";
-          break;
-      }
+    if (level.Value < loggerLevel.Value)
+      return;
 
-      const message = msgs.map((msg) => tostring(msg)).join(" ");
-      print(`[${this.name}] <${levelName}> ${message}`);
+    let levelName = "";
+    switch (level) {
+      case Enum.AnalyticsLogLevel.Fatal:
+        levelName = "FATAL";
+        break;
+      case Enum.AnalyticsLogLevel.Error:
+        levelName = "ERROR";
+        break;
+      case Enum.AnalyticsLogLevel.Warning:
+        levelName = "WARN";
+        break;
+      case Enum.AnalyticsLogLevel.Debug:
+        levelName = "DEBUG";
+        break;
+      case Enum.AnalyticsLogLevel.Trace:
+        levelName = "VERBOSE";
+        break;
+      default:
+        levelName = "INFO";
+        break;
     }
+
+    const message = msgs.map((msg) => tostring(msg)).join(" ");
+    print(`[${this.name}] <${levelName}> ${message}`);
   }
 
   public sub(name: string) {
     return new Logger(`${this.name}/${name}`, this.level, this.handlers);
   }
 
-  public updateConfig(level: Enum.AnalyticsLogLevel, handlers: { [key: string]: Enum.AnalyticsLogLevel } | false) {
+  public updateConfig(level: Enum.AnalyticsLogLevel, handlers: { [key: string]: Enum.AnalyticsLogLevel } | undefined) {
     this.level = level;
     this.handlers = handlers;
   }

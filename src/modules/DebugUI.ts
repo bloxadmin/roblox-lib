@@ -35,7 +35,7 @@ export default class DebugUI extends Module {
 
     spawn(() => {
       while (true) {
-        if (math.floor(os.time() / 60) > math.floor(this.lastQuotaReset / 60) + 1) {
+        if (math.floor(os.time() / 60) > math.floor(this.lastQuotaReset / 60)) {
           this.admin.getAnalytics().sendMemoryStoreServiceQuotaUsageEvent(getMemoryQuotaUsage());
           resetMemoryQuotaUsage();
           this.lastQuotaReset = os.time();
