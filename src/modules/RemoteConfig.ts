@@ -86,5 +86,11 @@ export default class RemoteConfig extends Module {
     if (this.remoteConfig) {
       callback(this.remoteConfig[key] as T);
     }
+
+    return () => {
+      if (!this.watching[key]) return;
+
+      this.watching[key] = this.watching[key].filter((cb) => cb !== callback);
+    }
   }
 }

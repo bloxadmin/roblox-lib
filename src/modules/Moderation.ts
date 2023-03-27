@@ -17,16 +17,46 @@ export enum ModerationType {
 }
 
 const NOTIFICATION_COOLDOWN = 5;
+const TIME_UNITS = {
+  "s": 1,
+  "m": 60,
+  "h": 60 * 60,
+  "d": 60 * 60 * 24,
+  "w": 60 * 60 * 24 * 7,
+  "mo": 60 * 60 * 24 * 30,
+  "y": 60 * 60 * 24 * 365,
+  "kys": 60 * 60 * 24 * 365 * 1000,
+};
+const TIME_UNITS_NAMES: [string, number][] = [
+  ["kiloyears", TIME_UNITS.kys],
+  ["years", TIME_UNITS.y],
+  ["days", TIME_UNITS.d],
+  ["hours", TIME_UNITS.h],
+  ["minutes", TIME_UNITS.m],
+  ["seconds", TIME_UNITS.s],
+];
 
-function secondsToMinutesSeconds(seconds: number) {
-  const minutes = math.floor(seconds / 60);
-  const secondsLeft = seconds % 60;
-  if (minutes > 0) {
-    if (secondsLeft === 0) return `${minutes} minutes`;
+function secondsToHuman(seconds: number) {
+  const parts: string[] = [];
 
-    return `${minutes} minutes and ${secondsLeft} seconds`;
+  for (const [unit, secondsInUnit] of TIME_UNITS_NAMES) {
+    const count = math.floor(seconds / secondsInUnit);
+    if (count > 0) {
+      if (count === 1) {
+        parts.push(`${count} ${unit.sub(1, -2)}`);
+      } else {
+        parts.push(`${count} ${unit}`);
+      }
+      seconds -= count * secondsInUnit;
+    }
   }
-  return `${secondsLeft} seconds`;
+
+  if (parts.size() > 1) {
+    // add "and" before last part
+    parts[parts.size() - 1] = `and ${parts[parts.size() - 1]}`;
+  }
+
+  return parts.join(" ");
 }
 
 function getAllTextChannels(): TextChannel[] {
@@ -43,20 +73,6 @@ function getAllTextChannels(): TextChannel[] {
   return channels;
 }
 
-function getPlayerTextSources(player: Player): TextSource[] {
-  const sources: TextSource[] = [];
-
-  getAllTextChannels().forEach((channel) => {
-    const instances = channel.GetChildren();
-
-    instances?.filter((instance) => instance.IsA("TextSource")).forEach((instance) => {
-      const source = instance as TextSource;
-      if (source.UserId === player.UserId) sources.push(source);
-    });
-  });
-
-  return sources;
-}
 
 export default class Moderation extends Module<{
   kick: [Player, string];
@@ -69,6 +85,10 @@ export default class Moderation extends Module<{
   private lastNotifiedMuted: Record<number, number> = {};
   private systemMessageEvent: RemoteEvent<(data: string) => void>;
 
+  private autoModEnabled = false;
+  private autoModTime = 0;
+  private autoModBadWords: string[] = [];
+
   constructor(admin: BloxAdmin) {
     super("Moderation", admin);
 
@@ -78,12 +98,13 @@ export default class Moderation extends Module<{
 
   enable(): void {
     this.admin.messenger.on("message", (data) => {
-      const [eventType, moderationType, playerId, untilTime, reason] = data as [
+      const [eventType, moderationType, playerId, untilTime, reason, realDuration] = data as [
         EventType,
         ModerationType,
         number,
         number | undefined,
         string | undefined,
+        number | undefined,
       ];
       if (eventType !== EventType.Moderation) return;
       if (!moderationType) return;
@@ -100,7 +121,7 @@ export default class Moderation extends Module<{
           this.kick(player, reason);
           break;
         case ModerationType.Mute:
-          this.mute(player, untilTime, reason);
+          this.mute(player, untilTime, reason, realDuration);
           break;
         case ModerationType.Unmute:
           this.unmute(player, reason);
@@ -116,6 +137,36 @@ export default class Moderation extends Module<{
       if (!channel.IsA("TextChannel")) return;
       this.configureChannel(channel);
     });
+
+    const remoteConfig = this.admin.GetService("RemoteConfig");
+
+    remoteConfig.watch<boolean>("$chat.automod", (data) => {
+      this.autoModEnabled = data;
+      this.logger.debug(`Auto mod enabled: ${data}`);
+    });
+    remoteConfig.watch<string>("$chat.automod.time", (data) => {
+      // format: 1s 1m 1mo 1y 1kys
+      const time = tonumber(data.gsub("[^%d]", "")[0]) || 0;
+      const unit = data.lower().gsub("[^%a]", "")[0] as keyof typeof TIME_UNITS;
+
+      if (!time || !unit || !TIME_UNITS[unit]) {
+        this.logger.warn(`Invalid auto mod time: ${data}`);
+        return;
+      }
+
+      this.autoModTime = time * TIME_UNITS[unit];
+      this.logger.debug(`Auto mod time: ${this.autoModTime}`);
+    });
+    remoteConfig.watch<string[]>("$chat.automod.phrases", (data) => {
+      this.autoModBadWords = data;
+      this.logger.debug(`Auto mod bad words: ${data.join(', ')}`);
+    });
+
+    spawn(() => {
+      delay(1, () => {
+        this.unmuteCheck(true)
+      });
+    })
   }
 
   kick(player: Player, reason?: string) {
@@ -134,12 +185,27 @@ export default class Moderation extends Module<{
       channel?.MuteSpeaker(speaker.Name, undefined, seconds);
     });
     speaker?.SendSystemMessage(
-      seconds ? `You have been muted for ${secondsToMinutesSeconds(seconds)}${r}` : `You have been muted${r}`,
+      seconds ? `You have been muted for ${secondsToHuman(seconds)}${r}` : `You have been muted${r}`,
       "System",
     );
   }
 
   // Chat 
+
+  unmuteCheck(loop = false) {
+    for (const [playerId, untilTime] of pairs(this.playersMutedUntil)) {
+      if (untilTime !== -1 && untilTime < os.time()) {
+        const player = Players.GetPlayerByUserId(playerId);
+        if (player)
+          this.unmute(player, "Mute expired");
+      }
+    }
+
+    if (loop)
+      delay(1, () => {
+        this.unmuteCheck(true)
+      });
+  }
 
   isPlayerMuted(player: Player | number) {
     const playerId = typeIs(player, "number") ? player : player.UserId;
@@ -174,7 +240,7 @@ export default class Moderation extends Module<{
     }
   }
 
-  mute(player: Player, untilTime?: number, reason?: string) {
+  mute(player: Player, untilTime?: number, reason?: string, realDuration?: number) {
     this.logger.info(`Muting ${player.Name} for ${reason} until ${untilTime}`);
     this.playersMutedUntil[player.UserId] = untilTime || -1;
 
@@ -185,7 +251,7 @@ export default class Moderation extends Module<{
       return;
     }
     const r = reason ? ` for ${reason}` : "";
-    this.systemMessageEvent.FireClient(player, seconds ? `You have been muted for ${secondsToMinutesSeconds(seconds)}${r}` : `You have been muted${r}`,);
+    this.systemMessageEvent.FireClient(player, seconds ? `You have been muted for ${secondsToHuman(realDuration || seconds)}${r}` : `You have been muted${r}`,);
   }
 
   private unmuteLegacy(player: Player, reason?: string) {
