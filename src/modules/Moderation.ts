@@ -85,9 +85,9 @@ export default class Moderation extends Module<{
   private lastNotifiedMuted: Record<number, number> = {};
   private systemMessageEvent: RemoteEvent<(data: string) => void>;
 
-  private autoModEnabled = false;
-  private autoModTime = 0;
-  private autoModBadWords: string[] = [];
+  // private autoModEnabled = false;
+  // private autoModTime = 0;
+  // private autoModBadWords: string[] = [];
 
   constructor(admin: BloxAdmin) {
     super("Moderation", admin);
@@ -138,29 +138,29 @@ export default class Moderation extends Module<{
       this.configureChannel(channel);
     });
 
-    const remoteConfig = this.admin.GetService("RemoteConfig");
+    // const remoteConfig = this.admin.GetService("RemoteConfig");
 
-    remoteConfig.watch<boolean>("$chat.automod", (data) => {
-      this.autoModEnabled = data;
-      this.logger.debug(`Auto mod enabled: ${data}`);
-    });
-    remoteConfig.watch<string>("$chat.automod.time", (data) => {
-      // format: 1s 1m 1mo 1y 1kys
-      const time = tonumber(data.gsub("[^%d]", "")[0]) || 0;
-      const unit = data.lower().gsub("[^%a]", "")[0] as keyof typeof TIME_UNITS;
+    // remoteConfig.watch<boolean>("$chat.automod", (data) => {
+    //   this.autoModEnabled = data;
+    //   this.logger.debug(`Auto mod enabled: ${data}`);
+    // });
+    // remoteConfig.watch<string>("$chat.automod.time", (data) => {
+    //   // format: 1s 1m 1mo 1y 1kys
+    //   const time = tonumber(data.gsub("[^%d]", "")[0]) || 0;
+    //   const unit = data.lower().gsub("[^%a]", "")[0] as keyof typeof TIME_UNITS;
 
-      if (!time || !unit || !TIME_UNITS[unit]) {
-        this.logger.warn(`Invalid auto mod time: ${data}`);
-        return;
-      }
+    //   if (!time || !unit || !TIME_UNITS[unit]) {
+    //     this.logger.warn(`Invalid auto mod time: ${data}`);
+    //     return;
+    //   }
 
-      this.autoModTime = time * TIME_UNITS[unit];
-      this.logger.debug(`Auto mod time: ${this.autoModTime}`);
-    });
-    remoteConfig.watch<string[]>("$chat.automod.phrases", (data) => {
-      this.autoModBadWords = data;
-      this.logger.debug(`Auto mod bad words: ${data.join(', ')}`);
-    });
+    //   this.autoModTime = time * TIME_UNITS[unit];
+    //   this.logger.debug(`Auto mod time: ${this.autoModTime}`);
+    // });
+    // remoteConfig.watch<string[]>("$chat.automod.phrases", (data) => {
+    //   this.autoModBadWords = data;
+    //   this.logger.debug(`Auto mod bad words: ${data.join(', ')}`);
+    // });
 
     spawn(() => {
       delay(1, () => {
