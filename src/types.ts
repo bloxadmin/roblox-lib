@@ -70,6 +70,16 @@ export enum EventType {
   Chat = 6,
 }
 
+export interface ScriptErrorData {
+  enviroment: "client" | "server",
+  error: {
+    message: string, 
+    stack: string, 
+    script: LuaSourceContainer | undefined
+  },
+  player?: Player
+};
+
 export interface PlayerReadyData {
   input: {
     accelerometerEnabled: boolean;

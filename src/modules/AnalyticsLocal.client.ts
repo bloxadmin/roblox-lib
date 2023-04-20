@@ -1,4 +1,4 @@
-import { PlayerReadyData } from "types";
+import { PlayerReadyData, ScriptErrorData } from "types";
 
 const Workspace = game.GetService("Workspace");
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
@@ -8,10 +8,19 @@ const GuiService = game.GetService("GuiService");
 const LocalizationService = game.GetService("LocalizationService");
 const PolicyService = game.GetService("PolicyService");
 const Players = game.GetService("Players");
+const ScriptContext = game.GetService("ScriptContext");
+
+const scriptErrorEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitForChild(
+  "ScriptErrorEvent"
+) as RemoteEvent<(data: ScriptErrorData) => void>;
 
 const playerReadyEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitForChild(
   "AnalyticsPlayerReadyEvent",
 ) as RemoteEvent<(data: PlayerReadyData) => void>;
+
+ScriptContext.Error.Connect((message, stack, sk) => {
+  scriptErrorEvent.FireServer({ enviroment: "client", error: { message, stack, script: sk }, player: Players.LocalPlayer });
+});
 
 delay(3, () => {
   const CurrentCamera = Workspace.CurrentCamera;
