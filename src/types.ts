@@ -75,7 +75,7 @@ export interface ScriptErrorData {
   error: {
     message: string, 
     stack: string, 
-    script: LuaSourceContainer | undefined
+    script?: string
   },
   player?: Player
 };

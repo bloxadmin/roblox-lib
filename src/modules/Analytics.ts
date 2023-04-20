@@ -102,7 +102,7 @@ export default class Analytics extends Module {
     });
 
     ScriptContext.Error.Connect((message, stack, sk) => {
-      this.sendScriptErrorEvent({ enviroment: "server", error: { message, stack, script: sk } });
+      this.sendScriptErrorEvent({ enviroment: "server", error: { message, stack, script: sk?.GetFullName() } });
     });
 
     MarketplaceService.PromptBundlePurchaseFinished.Connect((player, bundleId, wasPurchased) => {
