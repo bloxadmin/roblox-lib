@@ -97,6 +97,10 @@ export default class Analytics extends Module {
       this.sendPlayerReadyEvent(player, data as PlayerReadyData);
     });
 
+    this.scriptErrorEvent.OnServerEvent.Connect((player, data) => {
+      this.sendScriptErrorEvent({ player, ...data as ScriptErrorData })
+    });
+
     LogService.MessageOut.Connect((message, msgType) => {
       this.sendConsoleLogEvent(message, msgType);
     });
