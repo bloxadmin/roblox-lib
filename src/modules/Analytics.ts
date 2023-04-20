@@ -49,6 +49,8 @@ export default class Analytics extends Module {
       return;
     }
 
+    this.logger.verbose(`Sending event ${name}`);
+
     this.admin.messenger.sendRemote([EventType.Analytics, name, os.time(), segments, data], priority).catch((e) => {
       this.logger.error(`Error sending event (${name}):`, tostring(e));
     });

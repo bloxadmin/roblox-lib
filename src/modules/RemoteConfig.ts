@@ -40,7 +40,7 @@ export default class RemoteConfig extends Module {
           callback(value);
         } catch (e) {
           this.admin.logger.error("Error in RemoteConfig watch callback");
-          error(e);
+          this.admin.logger.error(tostring(e));
         }
       });
     }
