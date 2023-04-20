@@ -12,15 +12,17 @@ export enum ActionEventType {
   Result = 2,
 }
 
+export type Parameter = Player | string | number | boolean | undefined | null;
+
 export interface ActionCall {
   name: string;
   id: string;
-  context: Record<string, unknown>;
-  parameters: Record<string, unknown>;
-  returns: Record<string, unknown>;
+  context: Record<string, Parameter>;
+  parameters: Record<string, Parameter>;
+  returns: Record<string, Parameter>;
 }
 
-export type ActionCallback = (context: ActionCall) => Record<string, unknown> | void;
+export type ActionCallback = (context: ActionCall, args: Record<string, Parameter>) => Record<string, Parameter> | void;
 
 export default class Actions extends Module {
   private readonly watchers: Record<string, ActionCallback[]>;
@@ -47,8 +49,8 @@ export default class Actions extends Module {
           const eventData = event as {
             name: string;
             id: string;
-            context: Record<string, unknown>;
-            parameters: Record<string, unknown>;
+            context: Record<string, Parameter>;
+            parameters: Record<string, Parameter>;
           };
 
           if (!this.canCall(eventData.name)) return;
@@ -79,16 +81,16 @@ export default class Actions extends Module {
   }: {
     name: string;
     id: string;
-    context: Record<string, unknown>;
-    parameters: Record<string, unknown>;
-  }): Record<string, unknown> {
+    context: Record<string, Parameter>;
+    parameters: Record<string, Parameter>;
+  }): Record<string, Parameter> {
     this.logger.debug(`Calling action ${name}`);
 
     const watchers = this.getWatchers(name);
 
     if (!watchers) return {};
 
-    const returns: Record<string, unknown> = {};
+    const returns: Record<string, Parameter> = {};
 
     watchers.forEach((watcher) => {
       try {
@@ -98,6 +100,9 @@ export default class Actions extends Module {
           context,
           parameters,
           returns,
+        }, {
+          ...context,
+          ...parameters,
         });
 
         if (result && typeOf(result) === "table") {
