@@ -19,7 +19,7 @@ const playerReadyEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitF
 ) as RemoteEvent<(data: PlayerReadyData) => void>;
 
 ScriptContext.Error.Connect((message, stack, sk) => {
-  scriptErrorEvent.FireServer({ enviroment: "client", error: { message, stack, script: sk?.GetFullName() }, player: Players.LocalPlayer });
+  scriptErrorEvent.FireServer({ message, stack, script: sk?.GetFullName() });
 });
 
 delay(3, () => {

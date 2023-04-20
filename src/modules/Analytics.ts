@@ -100,7 +100,7 @@ export default class Analytics extends Module {
     });
 
     this.scriptErrorEvent.OnServerEvent.Connect((player, data) => {
-      this.sendScriptErrorEvent({ player, ...data as ScriptErrorData })
+      this.sendScriptErrorEvent({...data as ScriptErrorData }, player)
     });
 
     LogService.MessageOut.Connect((message, msgType) => {
@@ -108,7 +108,7 @@ export default class Analytics extends Module {
     });
 
     ScriptContext.Error.Connect((message, stack, sk) => {
-      this.sendScriptErrorEvent({ enviroment: "server", error: { message, stack, script: sk?.GetFullName() } });
+      this.sendScriptErrorEvent({ message, stack, script: sk?.GetFullName() });
     });
 
     MarketplaceService.PromptBundlePurchaseFinished.Connect((player, bundleId, wasPurchased) => {
@@ -288,12 +288,12 @@ export default class Analytics extends Module {
    * @param sk Script which raised the error
    * @tags [auto]
    */
-  sendScriptErrorEvent(data: ScriptErrorData) {
+  sendScriptErrorEvent(data: ScriptErrorData, player?: Player) {
     if (this.eventDisallowed("scriptError", ["auto"])) return;
 
     this.send(
       "scriptError",
-      {},
+      player ? this.getPlayerSegments(player) : {},
       data,
     );
   }

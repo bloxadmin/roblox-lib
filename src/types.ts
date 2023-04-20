@@ -71,13 +71,9 @@ export enum EventType {
 }
 
 export interface ScriptErrorData {
-  enviroment: "client" | "server",
-  error: {
-    message: string, 
-    stack: string, 
-    script?: string
-  },
-  player?: Player
+  message: string, 
+  stack: string, 
+  script?: string
 };
 
 export interface PlayerReadyData {
