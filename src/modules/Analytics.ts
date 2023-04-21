@@ -294,7 +294,7 @@ export default class Analytics extends Module {
     this.send(
       "scriptError",
       player ? this.getPlayerSegments(player) : {},
-      data && player ? { playerName: player.GetFullName() } : { },
+      player ? { ...data, playerName: player.GetFullName() } : data,
     );
   }
 
