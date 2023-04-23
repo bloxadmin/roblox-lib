@@ -100,7 +100,7 @@ export default class Analytics extends Module {
     });
 
     this.scriptErrorEvent.OnServerEvent.Connect((player, data) => {
-      this.sendScriptErrorEvent({...data as ScriptErrorData }, player)
+      this.sendScriptErrorEvent({ ...data as ScriptErrorData }, player)
     });
 
     LogService.MessageOut.Connect((message, msgType) => {
@@ -214,6 +214,7 @@ export default class Analytics extends Module {
         players: (Players.GetChildren() as Player[]).map((p) => ({
           id: p.UserId,
           name: p.Name,
+          joinedAt: this.playerJoinTimes[p.UserId],
         })),
       },
       10, // High priority as this is used to check if the server is still alive
