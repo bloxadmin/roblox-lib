@@ -1,7 +1,7 @@
 import { BloxAdmin } from "BloxAdmin";
 import { BLOXADMIN_VERSION, DEFAULT_CONFIG } from "consts";
 import { Module } from "Module";
-import { Event, EventType, PlayerReadyData } from "types";
+import { Event, EventType, PlayerReadyData, ScriptErrorData } from "types";
 
 const LogService = game.GetService("LogService");
 const MarketplaceService = game.GetService("MarketplaceService");
@@ -14,11 +14,13 @@ const PolicyService = game.GetService("PolicyService");
 
 export default class Analytics extends Module {
   playerJoinTimes: Record<number, number> = {};
+  scriptErrorEvent: RemoteEvent<() => void>;
   playerReadyEvent: RemoteEvent<(data: PlayerReadyData) => void>;
 
   constructor(admin: BloxAdmin) {
     super("Analytics", admin);
 
+    this.scriptErrorEvent = this.admin.createEvent("ScriptErrorEvent");
     this.playerReadyEvent = this.admin.createEvent("AnalyticsPlayerReadyEvent");
     this.admin.loadLocalScript(script.Parent?.WaitForChild("AnalyticsLocal"));
   }
@@ -97,12 +99,16 @@ export default class Analytics extends Module {
       this.sendPlayerReadyEvent(player, data as PlayerReadyData);
     });
 
+    this.scriptErrorEvent.OnServerEvent.Connect((player, data) => {
+      this.sendScriptErrorEvent({ ...data as ScriptErrorData }, player)
+    });
+
     LogService.MessageOut.Connect((message, msgType) => {
       this.sendConsoleLogEvent(message, msgType);
     });
 
-    ScriptContext.Error.Connect((message, trace, sk) => {
-      this.sendScriptErrorEvent(message, trace, sk);
+    ScriptContext.Error.Connect((message, stack, sk) => {
+      this.sendScriptErrorEvent({ message, stack, script: sk?.GetFullName() });
     });
 
     MarketplaceService.PromptBundlePurchaseFinished.Connect((player, bundleId, wasPurchased) => {
@@ -208,6 +214,7 @@ export default class Analytics extends Module {
         players: (Players.GetChildren() as Player[]).map((p) => ({
           id: p.UserId,
           name: p.Name,
+          joinedAt: this.playerJoinTimes[p.UserId],
         })),
       },
       10, // High priority as this is used to check if the server is still alive
@@ -282,17 +289,13 @@ export default class Analytics extends Module {
    * @param sk Script which raised the error
    * @tags [auto]
    */
-  sendScriptErrorEvent(message: string, trace: string, sk: LuaSourceContainer | undefined) {
+  sendScriptErrorEvent(data: ScriptErrorData, player?: Player) {
     if (this.eventDisallowed("scriptError", ["auto"])) return;
 
     this.send(
       "scriptError",
-      {},
-      {
-        message,
-        trace,
-        script: sk?.GetFullName(),
-      },
+      player ? this.getPlayerSegments(player) : {},
+      player ? { ...data, playerName: player.GetFullName() } : data,
     );
   }
 

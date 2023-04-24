@@ -70,6 +70,13 @@ export enum EventType {
   Chat = 6,
 }
 
+export interface ScriptErrorData {
+  message: string, 
+  stack: string, 
+  script?: string,
+  playerName?: string
+};
+
 export interface PlayerReadyData {
   input: {
     accelerometerEnabled: boolean;
