@@ -71,10 +71,9 @@ export enum EventType {
 }
 
 export interface ScriptErrorData {
-  message: string, 
-  stack: string, 
-  script?: string,
-  playerName?: string
+  message: string,
+  stack: string,
+  script?: string
 };
 
 export interface PlayerReadyData {

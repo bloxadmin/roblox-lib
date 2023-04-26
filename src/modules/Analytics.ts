@@ -292,11 +292,16 @@ export default class Analytics extends Module {
   sendScriptErrorEvent(data: ScriptErrorData, player?: Player) {
     if (this.eventDisallowed("scriptError", ["auto"])) return;
 
-    this.send(
-      "scriptError",
-      player ? this.getPlayerSegments(player) : {},
-      player ? { ...data, playerName: player.GetFullName() } : data,
-    );
+    let segments = player ? this.getPlayerSegments(player) : {};
+
+    this.send("scriptError", segments, {
+      error: data,
+      occurence: {
+        placeId: game.PlaceId,
+        placeVersion: game.PlaceVersion,
+        player: player ? { id: player.UserId, name: player.Name } : undefined
+      }
+    });
   }
 
   /**
