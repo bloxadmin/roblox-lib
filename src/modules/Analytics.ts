@@ -12,6 +12,11 @@ const StatsService = game.GetService("Stats");
 const LocalizationService = game.GetService("LocalizationService");
 const PolicyService = game.GetService("PolicyService");
 
+const remoteLocalEvents: string[] = [
+  "heartbeat",
+  "stats",
+];
+
 export default class Analytics extends Module {
   playerJoinTimes: Record<number, number> = {};
   scriptErrorEvent: RemoteEvent<() => void>;
@@ -53,9 +58,17 @@ export default class Analytics extends Module {
 
     this.logger.verbose(`Sending event ${name}`);
 
-    this.admin.messenger.sendRemote([EventType.Analytics, name, os.time(), segments, data], priority).catch((e) => {
-      this.logger.error(`Error sending event (${name}):`, tostring(e));
-    });
+    const message: [EventType, string, number, Record<string, string>, unknown] = [
+      EventType.Analytics, name, os.time(), segments, data
+    ];
+
+    if (remoteLocalEvents.includes(name)) {
+      this.admin.messenger.sendRemoteLocal(message);
+    } else {
+      this.admin.messenger.sendRemote(message, priority).catch((e) => {
+        this.logger.error(`Error sending event (${name}):`, tostring(e));
+      });
+    }
   }
 
   private setupPlayer(player: Player) {

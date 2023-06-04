@@ -44,7 +44,7 @@ export function getMemoryQuotaUsage(): number {
   return memoryQuotaUsage;
 }
 
-export default class RemoteMessaging<M = unknown> extends EventEmitter<{
+export default class RemoteMessaging<M extends defined> extends EventEmitter<{
   message: [M];
   global: [M];
   local: [M];
@@ -65,15 +65,16 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{
   private readonly listening: {
     [key in Queue]: boolean;
   } = {
-    local: false,
-    global: false,
-    remote: false,
-  };
+      local: false,
+      global: false,
+      remote: false,
+    };
   private readonly queues: {
     [Queue.Local]: PromiseQueue<M>;
     [Queue.Global]: PromiseQueue<M>;
     [Queue.Remote]: PromiseQueue<[string, M]>;
   };
+  private readonly localQueue: M[];
 
   constructor({
     name,
@@ -110,6 +111,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{
       local: new PromiseQueue(`${QUEUE_PREFIX}${LOCAL_QUEUE}.${tostring(name)}.${tostring(localId)}`),
       remote: new PromiseQueue(`${QUEUE_PREFIX}${GLOBAL_REMOTE_QUEUE}.${tostring(name)}`),
     };
+    this.localQueue = [];
   }
 
   public setApiKey(apiKey: string) {
@@ -133,7 +135,22 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{
   }
 
   public async sendRemote(message: M, priority = 0, expiresIn = 3600) {
-    this.logger?.verbose("Sending remote message:", HttpService.JSONEncode(message));
+    this.sendRemoteLocal(message);
+    // this.logger?.verbose("Sending remote message:", HttpService.JSONEncode(message));
+
+    // const size = HttpService.JSONEncode(message).size();
+    // if (size > 9000) {
+    //   error(`Message size is too large. ${size} > 9000`);
+    // }
+
+    // if (!message) return;
+
+    // await this.queues.remote.add([this.localId, message as M], expiresIn, priority);
+    // memoryQuotaUsage++;
+  }
+
+  public async sendRemoteLocal(message: M) {
+    this.logger?.verbose("Sending remote-local message:", HttpService.JSONEncode(message));
 
     const size = HttpService.JSONEncode(message).size();
     if (size > 9000) {
@@ -141,9 +158,7 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{
     }
 
     if (!message) return;
-
-    await this.queues.remote.add([this.localId, message as M], expiresIn, priority);
-    memoryQuotaUsage++;
+    this.localQueue.push(message);
   }
 
   public async sendLocal(message: M, id: string, priority = 0, expiresIn = 3600) {
@@ -280,15 +295,27 @@ export default class RemoteMessaging<M = unknown> extends EventEmitter<{
       this.remoteOptions = options;
     }
 
-    const [messages, removeId] = await this.queues.remote.read(100, false, this.config.intervals.ingest);
-    memoryQuotaUsage += math.max(1, messages.size());
+    const priorityMessages: [string, M][] = [];
+
+    while (this.localQueue.size() > 0 && priorityMessages.size() < 100) {
+      const message = this.localQueue.shift();
+      if (!message) break;
+      priorityMessages.push([this.localId, message]);
+    }
+
+    // const [queueMessages, removeId] = await this.queues.remote.read(100 - priorityMessages.size(), false, this.config.intervals.ingest);
+    // memoryQuotaUsage += math.max(1, queueMessages.size());
+
+    // const messages = [...(queueMessages || []), ...priorityMessages]
+    const removeId = undefined;
+    const messages = priorityMessages;
 
     if (messages && messages.size()) {
       this.logger?.verbose("Sending remote messages:", HttpService.JSONEncode(messages));
     }
 
     const postBody = {
-      messages: messages || [],
+      messages,
     };
 
     const remoteResult = pcall<[], RequestAsyncResponse>(() => {
