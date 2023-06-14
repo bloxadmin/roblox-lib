@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG } from "consts";
 import Actions from "modules/Actions";
 import Analytics from "modules/Analytics";
 import DebugUI from "modules/DebugUI";
+import Metrics from "modules/Metrics";
 import Moderation from "modules/Moderation";
 import RemoteConfig from "modules/RemoteConfig";
 import Shutdown from "modules/Shutdown";
@@ -104,6 +105,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.loadModule(new Moderation(this));
     this.loadModule(new Actions(this));
     this.loadModule(new DebugUI(this));
+    this.loadModule(new Metrics(this));
 
     this.messenger.on("message", (message) => {
       this.logger.info(`Received message: ${HttpService.JSONEncode(message)}`);
@@ -240,6 +242,20 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     event.Parent = this.eventsFolder;
 
     return event;
+  }
+
+  ProcessReceipt(callback: (receipt: ReceiptInfo) => Enum.ProductPurchaseDecision) {
+    return (receipt: ReceiptInfo) => {
+      const decision = callback(receipt);
+
+      try {
+        this.getAnalytics()?.ProcessReceipt(receipt, decision);
+      } catch (e) {
+        this.logger.warn(`Error sending process recipt: ${e}`);
+      }
+
+      return decision;
+    };
   }
 }
 

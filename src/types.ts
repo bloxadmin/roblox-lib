@@ -6,7 +6,7 @@ export type MarketplaceEvents =
   | "marketplacePromptPurchaseFinished"
   | "marketplaceThirdPartyPurchaseFinished"
   | "marketplaceProductPurchaseFinished"
-  | "processReceipt";
+  | "marketplaceProcessReceipt";
 export type AutoPlayerEvents = MarketplaceEvents | "playerJoin" | "playerLeave" | "playerReady" | "playerChat";
 export type AutoEvents =
   | AutoIntervalEvents
@@ -68,6 +68,7 @@ export enum EventType {
   Moderation = 4,
   Shutdown = 5,
   Chat = 6,
+  Metrics = 7,
 }
 
 export interface ScriptErrorData {

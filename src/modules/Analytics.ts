@@ -312,7 +312,7 @@ export default class Analytics extends Module {
       occurence: {
         placeId: game.PlaceId,
         placeVersion: game.PlaceVersion,
-        player: player ? { id: player.UserId, name: player.Name } : undefined
+        playerId: player ? player.UserId : undefined
       }
     });
   }
@@ -558,6 +558,18 @@ export default class Analytics extends Module {
     this.send("marketplacePromptPurchaseFinished", this.getPlayerSegments(player), {
       assetId,
       wasPurchased,
+    });
+  }
+
+  ProcessReceipt(receipt: ReceiptInfo, decision: Enum.ProductPurchaseDecision) {
+    if (this.eventDisallowed("marketplaceProcessReceipt", ["player", "marketplace"])) return;
+
+    this.send("marketplaceProcessReceipt", this.getPlayerSegments(receipt.PlayerId), {
+      currencySpent: receipt.CurrencySpent,
+      productId: receipt.ProductId,
+      purchaseId: receipt.PurchaseId,
+      placeId: receipt.PlaceIdWherePurchased,
+      wasPurchased: decision.Name === "PurchaseGranted",
     });
   }
 
