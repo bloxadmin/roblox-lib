@@ -1,6 +1,5 @@
 import { BloxAdmin } from "BloxAdmin";
 import { Module } from "Module";
-import { getMemoryQuotaUsage, resetMemoryQuotaUsage } from "RemoteMessaging";
 import { BLOXADMIN_VERSION } from "consts";
 
 const Players = game.GetService("Players");
@@ -35,28 +34,26 @@ export default class DebugUI extends Module {
 
     spawn(() => {
       while (true) {
-        if (math.floor(os.time() / 60) > math.floor(this.lastQuotaReset / 60)) {
-          this.admin.getAnalytics().sendMemoryStoreServiceQuotaUsageEvent(getMemoryQuotaUsage());
-          resetMemoryQuotaUsage();
-          this.lastQuotaReset = os.time();
-        }
+        const newText = this.debugText();
+
         this.textLabels.forEach((label) => {
-          if (label.Parent) label.Text = this.debugText();
+          if (label.Parent) label.Text = newText;
         });
+
         wait(this.textLabels.size() ? 0.1 : 1);
       }
     });
   }
 
   debugText() {
-    return `BloxAdmin v${BLOXADMIN_VERSION} (${getMemoryQuotaUsage()}, ${this.lastQuotaReset})`;
+    return `bloxadmin v${BLOXADMIN_VERSION} (${this.admin.messenger.localId}, ${this.admin.messenger.getQueueSize()})`;
   }
 
   createDebugUI(): ScreenGui {
     const debugUI = new Instance("ScreenGui");
 
     debugUI.DisplayOrder = 1000;
-    debugUI.Name = "BloxAdmin";
+    debugUI.Name = "bloxadmin";
     debugUI.Enabled = false;
 
     const frame = new Instance("Frame");

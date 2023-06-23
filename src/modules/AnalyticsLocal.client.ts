@@ -10,11 +10,11 @@ const PolicyService = game.GetService("PolicyService");
 const Players = game.GetService("Players");
 const ScriptContext = game.GetService("ScriptContext");
 
-const scriptErrorEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitForChild(
+const scriptErrorEvent = ReplicatedStorage.WaitForChild("bloxadminEvents").WaitForChild(
   "ScriptErrorEvent"
 ) as RemoteEvent<(data: ScriptErrorData) => void>;
 
-const playerReadyEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitForChild(
+const playerReadyEvent = ReplicatedStorage.WaitForChild("bloxadminEvents").WaitForChild(
   "AnalyticsPlayerReadyEvent",
 ) as RemoteEvent<(data: PlayerReadyData) => void>;
 
@@ -53,9 +53,9 @@ delay(3, () => {
     },
     camera: CurrentCamera
       ? {
-          fov: CurrentCamera.FieldOfView,
-          viewportSize: [CurrentCamera.ViewportSize.X, CurrentCamera.ViewportSize.Y],
-        }
+        fov: CurrentCamera.FieldOfView,
+        viewportSize: [CurrentCamera.ViewportSize.X, CurrentCamera.ViewportSize.Y],
+      }
       : undefined,
     gui: {
       isTenFootInterface: GuiService.IsTenFootInterface(),

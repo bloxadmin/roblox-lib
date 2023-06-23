@@ -93,10 +93,11 @@ export default class Moderation extends Module<{
     super("Moderation", admin);
 
     this.systemMessageEvent = this.admin.createEvent("ModerationSystemMessageEvent");
-    this.admin.loadLocalScript(script.Parent?.WaitForChild("ModerationLocal"));
   }
 
   enable(): void {
+    this.admin.loadLocalScript(script.Parent?.WaitForChild("ModerationLocal"));
+
     this.admin.messenger.on("message", (data) => {
       const [eventType, moderationType, playerId, untilTime, reason, realDuration] = data as [
         EventType,

@@ -1,3 +1,4 @@
+const startedAt = os.clock();
 import EventEmitter from "EventEmitter";
 import Logger from "Logger";
 import { Module } from "Module";
@@ -40,7 +41,8 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   config: Config;
   logger: Logger;
   readonly messenger: RemoteMessaging<[EventType, ...unknown[]]>;
-  readonly eventsFolder: Folder;
+  eventsFolder?: Folder;
+  private remoteEvents: RemoteEvent[];
   private sessionIds: Record<number, string | undefined>;
   private modules: Record<string, Module>;
   private randomServerId: string;
@@ -48,10 +50,9 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   private enabled = false;
 
   constructor(config: InitConfig | undefined) {
+    const setupStart = os.clock();
     super();
-    if (!RunService.IsServer()) throw error("[BloxAdmin] <ERROR> Can only be ran on the server", 4);
-    if (!pcall(() => HttpService.RequestAsync({ Url: "https://example.com", Method: "GET" }))[0])
-      throw error("[BloxAdmin] <ERROR> HTTP Requests are not enabled");
+    if (!RunService.IsServer()) throw error("[bloxadmin] <ERROR> Can only be ran on the server", 4);
 
     this.config = config
       ? {
@@ -72,13 +73,12 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.sessionIds = {};
     this.modules = {};
     this.randomServerId = uuid();
+    this.remoteEvents = [];
+    const configTook = os.clock() - setupStart;
 
-    this.eventsFolder = new Instance("Folder");
-    this.eventsFolder.Name = "BloxAdminEvents";
-    this.eventsFolder.Parent = game.GetService("ReplicatedStorage");
-
+    const loggerStart = os.clock();
     this.logger = new Logger(
-      "BloxAdmin",
+      "bloxadmin",
       this.config.api.loggingLevel ||
       (RunService.IsStudio() ? Enum.AnalyticsLogLevel.Information : Enum.AnalyticsLogLevel.Warning),
       this.config.api.loggingHandlers,
@@ -88,27 +88,35 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
         `Logging level set to ${Enum.AnalyticsLogLevel.Information} because in studio and no logging level set`,
       );
     }
+    this.logger.verbose(`Config took ${configTook}s`);
+    this.logger.verbose(`Logger took ${os.clock() - loggerStart}s`);
+
     this.logger.debug("Starting");
+
+    const messengerStart = os.clock();
     this.messenger = new RemoteMessaging({
-      name: "BloxAdmin",
+      name: "bloxadmin",
       config: this.config,
       localId: this.serverId(),
       url: `${this.config.api.base}/games/${game.GameId}/servers/${this.serverId()}/messaging`,
       logger: this.logger.sub("RemoteMessaging"),
     });
+    this.logger.verbose(`Messenger took ${os.clock() - messengerStart}s`);
 
     this.logger.verbose("Loading config:", tostring(this.config));
 
-    this.loadModule(new Analytics(this));
-    this.loadModule(new RemoteConfig(this));
-    this.loadModule(new Shutdown(this));
-    this.loadModule(new Moderation(this));
-    this.loadModule(new Actions(this));
-    this.loadModule(new DebugUI(this));
-    this.loadModule(new Metrics(this));
+    const loadStart = os.clock();
+    this.loadModule(() => new Analytics(this));
+    this.loadModule(() => new RemoteConfig(this));
+    this.loadModule(() => new Shutdown(this));
+    this.loadModule(() => new Moderation(this));
+    this.loadModule(() => new Actions(this));
+    this.loadModule(() => new DebugUI(this));
+    this.loadModule(() => new Metrics(this));
+    this.logger.debug(`Loaded modules in ${os.clock() - loadStart}s`);
 
     this.messenger.on("message", (message) => {
-      this.logger.info(`Received message: ${HttpService.JSONEncode(message)}`);
+      this.logger.debug(`Received message: ${HttpService.JSONEncode(message)}`);
     });
 
     // Call start on next clock cycle
@@ -155,24 +163,40 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   enable() {
     if (this.enabled) return;
 
+    this.eventsFolder = new Instance("Folder");
+    this.eventsFolder.Name = "bloxadminEvents";
+    this.eventsFolder.Parent = game.GetService("ReplicatedStorage");
+
+    this.remoteEvents.forEach((remoteEvent) => {
+      remoteEvent.Parent = this.eventsFolder;
+    });
+    this.remoteEvents = [];
+
+    const fullStartTime = os.clock();
+
+    if (!pcall(() => HttpService.RequestAsync({ Url: "https://example.com", Method: "GET" }))[0])
+      throw error("[bloxadmin] <ERROR> HTTP Requests are not enabled");
+
     this.enabled = true;
 
     // eslint-disable-next-line roblox-ts/no-array-pairs
     for (const [, mod] of pairs(this.modules)) {
-      mod.logger.debug("Enabled");
+      const startTime = os.clock();
       this.modules[mod.name].enable();
+      mod.logger.verbose(`Enabled in ${os.clock() - startTime}s`);
     }
+
+    this.logger.debug(`Enabled in ${os.clock() - fullStartTime}s`);
   }
 
   start(apiKey: string) {
     if (this.started) return;
     this.started = true;
 
-    this.messenger.connectLocalEmitter();
-    this.messenger.connectGlobalEmitter();
-    this.messenger.connectRemote(apiKey);
+    this.messenger.connectRemote();
+    this.messenger.start(apiKey);
 
-    this.logger.info("Ready");
+    this.logger.info(`Ready in ${os.clock() - startedAt}s`);
 
     this.emit("ready");
   }
@@ -197,7 +221,9 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     return this.GetService("Actions");
   }
 
-  loadModule<M extends Module>(mod: M) {
+  loadModule<M extends Module>(getMod: () => M) {
+    const startTime = os.clock();
+    const mod = getMod();
     if (this.modules[mod.name]) {
       this.logger.warn(
         debug.traceback(
@@ -207,7 +233,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
       );
     }
 
-    mod.logger.debug("Loaded");
+    mod.logger.verbose(`Loaded in ${os.clock() - startTime}s`);
     this.modules[mod.name] = mod;
     return mod;
   }
@@ -225,7 +251,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   loadLocalScript(s?: Instance) {
     if (!s) return;
 
-    s.Name = `BloxAdmin${s.Name}`;
+    s.Name = `bloxadmin${s.Name}`;
     s.Parent = StarterPlayer.WaitForChild("StarterPlayerScripts");
 
     // Give script to all players that have already joined
@@ -239,7 +265,11 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
   createEvent<C extends Callback = Callback>(name: string): RemoteEvent<C> {
     const event = new Instance("RemoteEvent");
     event.Name = name;
-    event.Parent = this.eventsFolder;
+    if (this.eventsFolder) {
+      event.Parent = this.eventsFolder;
+    } else {
+      this.remoteEvents.push(event);
+    }
 
     return event;
   }
@@ -261,18 +291,27 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
 
 export default function init(apiKey?: string, config: InitConfig = {}) {
   try {
-    const g = _G as { _BloxAdmin: BloxAdmin };
+    const g = _G as { bloxadmin: BloxAdmin };
     let ba: BloxAdmin;
 
-    if (g._BloxAdmin) {
-      ba = g._BloxAdmin;
+    if (g.bloxadmin) {
+      ba = g.bloxadmin;
       ba.updateConfig(config);
     } else {
+      const started = os.clock();
       ba = new BloxAdmin(config);
-      g._BloxAdmin = ba;
+      g.bloxadmin = ba;
+
+      ba.logger.debug(`Initialized in ${os.clock() - started}s`);
+      ba.logger.debug(`Loaded in ${os.clock() - startedAt}s`);
     }
 
-    if (apiKey) ba.start(apiKey);
+    if (apiKey) {
+      const start = coroutine.create(() => {
+        ba.start(apiKey);
+      });
+      coroutine.resume(start);
+    }
 
     return ba;
   } catch (e) {

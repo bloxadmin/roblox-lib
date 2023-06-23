@@ -27,10 +27,10 @@ export default class Analytics extends Module {
 
     this.scriptErrorEvent = this.admin.createEvent("ScriptErrorEvent");
     this.playerReadyEvent = this.admin.createEvent("AnalyticsPlayerReadyEvent");
-    this.admin.loadLocalScript(script.Parent?.WaitForChild("AnalyticsLocal"));
   }
 
   enable(): void {
+    this.admin.loadLocalScript(script.Parent?.WaitForChild("AnalyticsLocal"));
     // this.on("connect", () => {
     //   this.logger.info("Connected to injestor");
     // });
@@ -280,7 +280,7 @@ export default class Analytics extends Module {
   sendConsoleLogEvent(message: string, msgType: Enum.MessageType) {
     if (this.eventDisallowed("consoleLog", ["auto"])) return;
 
-    if (message.sub(0, 10) === "[BloxAdmin") return;
+    if (message.sub(0, 10) === "[bloxadmin") return;
 
     this.send(
       "consoleLog",

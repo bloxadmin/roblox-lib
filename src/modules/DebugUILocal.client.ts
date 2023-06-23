@@ -1,6 +1,6 @@
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 
-const logEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitForChild("DebugLogEvent") as RemoteEvent<
+const logEvent = ReplicatedStorage.WaitForChild("bloxadminEvents").WaitForChild("DebugLogEvent") as RemoteEvent<
   (data: string) => void
 >;
 

@@ -47,6 +47,7 @@ export interface Config {
   intervals: {
     ingest: number;
     ingestRetry: number;
+    ingestNoopRetry: number;
     stats: number;
     heartbeat: number;
     playerPositions: number;
