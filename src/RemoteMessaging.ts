@@ -6,6 +6,7 @@ import { Config } from "types";
 
 const HttpService = game.GetService("HttpService");
 const RunService = game.GetService("RunService");
+const MessagingService = game.GetService("MessagingService");
 
 const MIN_ROBLOX_WAIT = 0.029;
 const QUEUE_PREFIX = "__remote-streaming";
@@ -97,7 +98,7 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     this.config = config;
     this.logger = logger;
     this.runMode = [
-      RunService.IsStudio() ? "studio" : "",
+      RunService.IsStudio() && !this.config.api.DEBUGGING_ONLY_runInStudio ? "studio" : "",
       RunService.IsServer() ? "server" : "",
       RunService.IsClient() ? "client" : "",
       RunService.IsRunMode() ? "run_mode" : "",
@@ -112,6 +113,24 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
       remote: new PromiseQueue(`${QUEUE_PREFIX}${GLOBAL_REMOTE_QUEUE}.${tostring(name)}`),
     };
     this.localQueue = [];
+
+    MessagingService.SubscribeAsync(`bloxadmin`, ({ Data }) => {
+      const [server, messages] = HttpService.JSONDecode(Data as string) as [string, M[]];
+
+      if (server !== this.localId) {
+        return;
+      }
+
+      this.logger?.debug("Received remote message via messaging service:", HttpService.JSONEncode(messages));
+
+      messages.forEach((m) => {
+        const result = this.emit("message", m) && this.emit("local", m);
+
+        if (!result) {
+          this.logger?.warn("Unhandled remote message:", HttpService.JSONEncode(m));
+        }
+      });
+    })
   }
 
   public setApiKey(apiKey: string) {

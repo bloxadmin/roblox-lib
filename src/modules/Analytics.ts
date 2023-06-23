@@ -307,6 +307,14 @@ export default class Analytics extends Module {
 
     let segments = player ? this.getPlayerSegments(player) : {};
 
+    if (player) {
+      data.message = data.message.gsub(player.Name, "PlayerName")[0]
+      data.stack = data.stack.gsub(player.Name, "PlayerName")[0]
+
+      if (data.script)
+        data.script = data.script.gsub(player.Name, "PlayerName")[0]
+    }
+
     this.send("scriptError", segments, {
       error: data,
       occurence: {
