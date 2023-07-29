@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@master
+
+      - name: Setup Aftman
+        uses: ok-nick/setup-aftman@v0.1.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          trust-check: false
+          version: "v0.2.6"
+
+      - name: Build Plugin
+        run: rojo build plugin --output Rojo.rbxm
+
+      - run: |
+          yarn
+          yarn build
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.github_token }}
+        with:
+          files: bloxadmin-sdk.rbxmx
