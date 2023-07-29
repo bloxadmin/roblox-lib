@@ -1,7 +1,7 @@
 import EventEmitter from "EventEmitter";
 import Logger from "Logger";
 import { BLOXADMIN_VERSION } from "consts";
-import { Config } from "types";
+import { Config, InitConfig } from "types";
 
 const HttpService = game.GetService("HttpService");
 const RunService = game.GetService("RunService");
@@ -10,22 +10,20 @@ const MessagingService = game.GetService("MessagingService");
 const MIN_ROBLOX_WAIT = 0.029;
 interface RemoteOptions {
   url: string;
-  config: {
-    events: Config['events'];
-    intervals: Config['intervals'];
-  },
+  config: InitConfig,
   options: {
     [key: string]: unknown;
   };
 }
 
-type RemoteResponse = [boolean, string | undefined];
+type RemoteResponse = [boolean, string | undefined, InitConfig | undefined];
 
 export default class RemoteMessaging<M extends defined> extends EventEmitter<{
   message: [M];
   global: [M];
   local: [M];
   connect: [];
+  options: [RemoteOptions];
 }> {
   public readonly name: string;
   public readonly localId: string;
@@ -34,12 +32,12 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
   private apiKey?: string;
   public config: Config;
   public readonly logger?: Logger;
+  private readonly updateConfig: (config: InitConfig) => void;
 
   private remoteOptions?: RemoteOptions;
-  private remoteOptionsResolvers: Array<(options: RemoteOptions) => void> = [];
-  private remoteAuthListener?: RBXScriptConnection;
 
   private listeningRemote = false;
+  private flushing = false;
 
   private readonly localQueue: M[];
 
@@ -49,12 +47,14 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     url,
     config,
     logger,
+    updateConfig,
   }: {
     name: string;
     url: string;
     localId: string;
     config: Config;
     logger: Logger;
+    updateConfig: (config: InitConfig) => void;
   }) {
     super();
 
@@ -63,6 +63,7 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     this.url = url;
     this.config = config;
     this.logger = logger;
+    this.updateConfig = updateConfig;
     this.runMode = [
       RunService.IsStudio() && !this.config.api.DEBUGGING_ONLY_runInStudio ? "studio" : "",
       RunService.IsServer() ? "server" : "",
@@ -84,6 +85,11 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     return this.localQueue.size();
   }
 
+  public setOptions(options: RemoteOptions) {
+    this.remoteOptions = options;
+    this.emit("options", options);
+  }
+
   public async serverStop() {
     if (RunService.IsStudio() && !this.config.api.DEBUGGING_ONLY_runInStudio) {
       this.logger?.debug("Skipping flush on studio stop");
@@ -95,27 +101,12 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     let result = 100;
     let count = -10;
     while (result !== 0 && count < 0) {
-      [result] = await this.flush();
+      result = await this.flush();
       count++;
     }
   }
 
-  public async sendRemote(message: M, priority = 0, expiresIn = 3600) {
-    this.sendRemoteLocal(message);
-    // this.logger?.verbose("Sending remote message:", HttpService.JSONEncode(message));
-
-    // const size = HttpService.JSONEncode(message).size();
-    // if (size > 9000) {
-    //   error(`Message size is too large. ${size} > 9000`);
-    // }
-
-    // if (!message) return;
-
-    // await this.queues.remote.add([this.localId, message as M], expiresIn, priority);
-    // memoryQuotaUsage++;
-  }
-
-  public async sendRemoteLocal(message: M) {
+  public async sendRemote(message: M) {
     this.logger?.verbose("Sending remote-local message:", HttpService.JSONEncode(message));
 
     const size = HttpService.JSONEncode(message).size();
@@ -127,13 +118,6 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     this.localQueue.push(message);
   }
 
-  public async waitForRemoteOptions(): Promise<RemoteOptions> {
-    if (this.remoteOptions) return this.remoteOptions;
-    return new Promise((resolve) => {
-      this.remoteOptionsResolvers.push(resolve);
-    });
-  }
-
   private reqHeaders(): Record<string, string> {
     return {
       Authorization: `Bearer ${this.apiKey}`,
@@ -141,110 +125,6 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
       "x-roblox-mode": this.runMode,
       "x-bloxadmin-version": tostring(BLOXADMIN_VERSION),
     };
-  }
-
-  public fetchRemoteOptions(): RemoteOptions | undefined {
-    this.logger?.sub("fetchRemoteOptions()").debug(`GETTING FROM "${this.url}"`);
-    const result = pcall<[], RequestAsyncResponse>(() => {
-      return HttpService.RequestAsync({
-        Method: "GET",
-        Headers: this.reqHeaders(),
-        Url: this.url,
-      });
-    });
-
-    if (!result[0]) {
-      this.logger?.sub("fetchRemoteOptions()").debug(`HTTP Request failed ${this.url}: ${tostring(result[1])}`);
-      return undefined;
-    }
-
-    const [_, response] = result as LuaTuple<[boolean, RequestAsyncResponse]>;
-
-    this.logger?.verbose("Fetched remote options", `${response.Body}`);
-
-    if (response.StatusCode !== 200) {
-      return undefined;
-    }
-
-    const options = HttpService.JSONDecode(response.Body) as RemoteOptions;
-
-    if (options) {
-      this.remoteOptionsResolvers.forEach((resolve) => resolve(options));
-      this.remoteOptionsResolvers = [];
-      this.logger?.sub("fetchRemoteOptions()").debug("RESOLVED");
-    }
-
-    return options;
-  }
-
-  async flush(): Promise<[number, boolean]> {
-    if (!this.remoteOptions) {
-      const options = this.fetchRemoteOptions();
-
-      if (!options) {
-        error(`Failed to fetch remote options for remote messaging (${this.url}): ${this.name}`);
-      }
-
-      this.remoteOptions = options;
-    }
-
-    if (this.localQueue.size() === 0) {
-      return [0, true];
-    }
-
-    const messages: [0, M][] = [];
-
-    while (messages.size() < 100) {
-      const message = this.localQueue.shift();
-      if (!message) break;
-      messages.push([0, message]);
-    }
-
-    if (!messages || messages.size() === 0) {
-      return [0, true];
-    }
-
-    this.logger?.verbose("Sending remote messages:", HttpService.JSONEncode(messages));
-
-    const postBody = {
-      messages,
-    };
-
-    const remoteResult = pcall<[], RequestAsyncResponse>(() => {
-      return HttpService.RequestAsync({
-        Method: "POST",
-        Headers: this.reqHeaders(),
-        Url: `${this.remoteOptions!.url}`,
-        Body: HttpService.JSONEncode(postBody),
-      });
-    });
-
-    // Posting messages to remote failed
-    if (!remoteResult[0]) {
-      error("Failed to post messages to remote: request failed");
-    }
-
-    const [__, response] = remoteResult as LuaTuple<[boolean, RequestAsyncResponse]>;
-
-    if (response.StatusCode !== 200) {
-      error("Failed to post messages to remote: invalid response");
-    }
-
-    const [success, newUrl] = HttpService.JSONDecode(response.Body) as RemoteResponse;
-
-    if (newUrl) {
-      this.remoteOptions.url = newUrl;
-    }
-
-    if (!success) {
-      const readd = messages.map((m) => m[1]);
-
-      for (let i = readd.size() - 1; i >= 0; i--) {
-        this.localQueue.unshift(readd[i]);
-      }
-    }
-
-    return [postBody.messages.size(), success];
   }
 
 
@@ -259,7 +139,7 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
       this.logger?.debug("Received remote message via messaging service:", HttpService.JSONEncode(messages));
 
       messages.forEach((m) => {
-        const result = this.emit("message", m) && this.emit("local", m);
+        const result = this.emit("message", m) || this.emit("local", m);
 
         if (!result) {
           this.logger?.warn("Unhandled remote message:", HttpService.JSONEncode(m));
@@ -268,7 +148,48 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     });
   }
 
-  public start(apiKey: string) {
+  public get(url: string) {
+    return HttpService.RequestAsync({
+      Method: "GET",
+      Headers: this.reqHeaders(),
+      Url: url,
+    });
+  }
+
+  public post(url: string, body: unknown) {
+    return HttpService.RequestAsync({
+      Method: "POST",
+      Headers: this.reqHeaders(),
+      Url: url,
+      Body: HttpService.JSONEncode(body),
+    });
+  }
+
+  public async setup(): Promise<void> {
+    const result = this.get(this.url);
+
+    if (!result) {
+      error(`Failed to fetch remote options for remote messaging (${this.url}): ${this.name}`);
+    }
+
+    if (result.StatusCode >= 400 && result.StatusCode < 500) {
+      warn(`[bloxadmin] Failed to fetch remote options for remote messaging: ${result.Body}`);
+      error(result.Body);
+    }
+
+    if (!result.Success) {
+      this.logger?.warn(`Failed to fetch remote options for remote messaging: ${result.Body}`);
+      this.logger?.warn("Retrying in 3 seconds");
+      delay(3, () => this.setup());
+      return;
+    }
+
+    const data = HttpService.JSONDecode(result.Body) as RemoteOptions;
+
+    this.setOptions(data);
+  }
+
+  public async start(apiKey: string) {
     this.apiKey = apiKey;
 
     if (this.listeningRemote) {
@@ -277,9 +198,83 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     }
 
     this.logger?.debug("Connecting to remote");
+
+    await this.setup()
+
+    this.logger?.debug("Sending events to remote");
     this.listeningRemote = true;
 
     this.flushLoop();
+  }
+
+  public flush(): number {
+    if (!this.remoteOptions) return 0;
+    if (this.flushing) return -1;
+    this.flushing = true;
+
+    try {
+      if (this.localQueue.size() === 0) {
+        return 0;
+      }
+
+      const messages: M[] = [];
+
+      while (messages.size() < 100) {
+        const message = this.localQueue.shift();
+        if (!message) break;
+        messages.push(message);
+      }
+
+      if (!messages || messages.size() === 0) {
+        return 0;
+      }
+
+      this.logger?.verbose("Sending remote messages:", HttpService.JSONEncode(messages));
+
+      const postBody = {
+        messages,
+      };
+
+      const result = this.post(this.remoteOptions.url, postBody);
+
+      if (!result.Success) {
+        throw `Failed to send remote messages: ${result.Body}`;
+      }
+
+      const data = HttpService.JSONDecode(result.Body) as {
+        options?: RemoteOptions;
+        retry?: M[];
+        messages: M[];
+      };
+
+      if (data.options) {
+        this.logger?.debug("Remote sent options:", HttpService.JSONEncode(data.options));
+        this.setOptions(data.options);
+      }
+
+      if (data.retry) {
+        this.logger?.debug("Remote requested retry:", HttpService.JSONEncode(data.retry));
+        data.retry.forEach((m) => this.localQueue.unshift(m));
+      }
+
+      if (data.messages) {
+        this.logger?.debug("Remote sent events:", tostring(data.messages.size()));
+
+        data.messages.forEach((m) => {
+          const result = this.emit("message", m) || this.emit("local", m);
+
+          if (!result) {
+            this.logger?.warn("Unhandled remote message:", HttpService.JSONEncode(m));
+          }
+        })
+      }
+
+      return messages.size() - (data.retry?.size() || 0);
+    } catch (err) {
+      throw err;
+    } finally {
+      this.flushing = false;
+    }
   }
 
   private flushLoop() {
@@ -290,13 +285,10 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
         const startAt = time();
         let toWait = this.config.intervals.ingest;
         try {
-          const [count, success] = await this.flush();
+          const count = await this.flush();
           const took = time() - startAt;
 
-          if (!success) {
-            toWait = this.config.intervals.ingestRetry - took;
-            this.logger?.verbose(`Ingest FAILED taking ${took} seconds, waiting ${toWait} seconds`);
-          } else if (count === 0) {
+          if (count === 0) {
             toWait = this.config.intervals.ingestNoopRetry - took;
           } else {
             toWait = this.config.intervals.ingest - took;

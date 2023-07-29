@@ -62,13 +62,9 @@ export default class Analytics extends Module {
       EventType.Analytics, name, os.time(), segments, data
     ];
 
-    if (remoteLocalEvents.includes(name)) {
-      this.admin.messenger.sendRemoteLocal(message);
-    } else {
-      this.admin.messenger.sendRemote(message, priority).catch((e) => {
-        this.logger.error(`Error sending event (${name}):`, tostring(e));
-      });
-    }
+    this.admin.messenger.sendRemote(message).catch((e) => {
+      this.logger.error(`Error sending event (${name}):`, tostring(e));
+    });
   }
 
   private setupPlayer(player: Player) {
@@ -85,6 +81,7 @@ export default class Analytics extends Module {
     game.BindToClose(() => {
       this.sendServerCloseEvent();
 
+      this.admin.messenger.flush();
       this.admin.messenger.serverStop();
     });
 
@@ -347,6 +344,10 @@ export default class Analytics extends Module {
       countryCode: LocalizationService.GetCountryRegionForPlayerAsync(player),
       policy: PolicyService.GetPolicyInfoForPlayerAsync(player),
     });
+
+    coroutine.wrap(() => {
+      this.admin.messenger.flush();
+    })();
   }
 
   /**

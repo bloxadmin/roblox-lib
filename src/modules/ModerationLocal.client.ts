@@ -1,7 +1,7 @@
 const ReplicatedStorage = game.GetService("ReplicatedStorage");
 const TextChatService = game.GetService("TextChatService");
 
-const systemMessageEvent = ReplicatedStorage.WaitForChild("BloxAdminEvents").WaitForChild(
+const systemMessageEvent = ReplicatedStorage.WaitForChild("bloxadminEvents").WaitForChild(
   "ModerationSystemMessageEvent",
 ) as RemoteEvent<(data: string) => void>;
 

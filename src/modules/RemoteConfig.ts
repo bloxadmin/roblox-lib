@@ -8,11 +8,15 @@ export default class RemoteConfig extends Module {
 
   constructor(admin: BloxAdmin) {
     super("RemoteConfig", admin);
+
+    this.admin.messenger.on("options", (options) => {
+      const config = (options.options?.config as Record<string, unknown>) || {};
+
+      this.updateRemoteConfig(config);
+    });
   }
 
   enable(): void {
-    this.getRemoteConfig();
-
     this.admin.messenger.on("message", ([eventType, config]) => {
       if (eventType !== EventType.RemoteConfig) return;
 
@@ -20,17 +24,8 @@ export default class RemoteConfig extends Module {
     });
   }
 
-  async getRemoteConfig(): Promise<Record<string, unknown>> {
-    if (this.remoteConfig) {
-      return this.remoteConfig;
-    }
-    const options = await this.admin.messenger.waitForRemoteOptions();
-
-    const config = (options.options?.config as Record<string, unknown>) || {};
-
-    this.updateRemoteConfig(config);
-
-    return config;
+  getRemoteConfig(): Record<string, unknown> {
+    return this.remoteConfig || {};
   }
 
   private callWatchers(key: string, value: unknown) {

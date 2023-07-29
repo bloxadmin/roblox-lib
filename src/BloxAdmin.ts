@@ -100,6 +100,9 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
       localId: this.serverId(),
       url: `${this.config.api.base}/games/${game.GameId}/servers/${this.serverId()}/messaging`,
       logger: this.logger.sub("RemoteMessaging"),
+      updateConfig: (config) => {
+        this.updateConfig(config);
+      }
     });
     this.logger.verbose(`Messenger took ${os.clock() - messengerStart}s`);
 
