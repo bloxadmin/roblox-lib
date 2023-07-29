@@ -18,9 +18,6 @@ jobs:
           trust-check: false
           version: "v0.2.6"
 
-      - name: Build Plugin
-        run: rojo build --output Rojo.rbxm
-
       - run: |
           yarn
           yarn build
