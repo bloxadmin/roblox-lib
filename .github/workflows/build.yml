@@ -19,7 +19,7 @@ jobs:
           version: "v0.2.6"
 
       - name: Build Plugin
-        run: rojo build plugin --output Rojo.rbxm
+        run: rojo build --output Rojo.rbxm
 
       - run: |
           yarn
