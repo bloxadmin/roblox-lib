@@ -22,6 +22,12 @@
           "node_modules": {
             "$path": "node_modules/@rbxts"
           }
+        },
+        "Version": {
+          "$className": "StringValue",
+          "$properties": {
+            "Value": "v1.122.1"
+          }
         }
       }
     },
