@@ -29,10 +29,8 @@ jobs:
           from: "xml"
           to: "json"
 
-      - uses: "finnp/create-file-action@master"
-        env:
-          FILE_NAME: "bloxadmin-sdk.json"
-          FILE_DATA: ${{ steps.yaml2json.outputs.output }}
+      - name: Print result
+        run: echo "${{ steps.yaml2json.outputs.output }} > bloxadmin-sdk.json"
 
       - name: Release
         uses: softprops/action-gh-release@v1
