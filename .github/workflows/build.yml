@@ -22,9 +22,23 @@ jobs:
           yarn
           yarn build
 
+      - uses: fabasoad/data-format-converter-action@main
+        id: yaml2json
+        with:
+          input: "docker-compose.yml"
+          from: "yaml"
+          to: "json"
+
+      - uses: "finnp/create-file-action@master"
+        env:
+          FILE_NAME: "bloxadmin-sdk.json"
+          FILE_DATA: ${{ steps.yaml2json.outputs.output }}
+
       - name: Release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.github_token }}
         with:
-          files: bloxadmin-sdk.rbxmx
+          files: |
+            bloxadmin-sdk.rbxmx
+            bloxadmin-sdk.json
