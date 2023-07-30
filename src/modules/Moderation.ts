@@ -3,11 +3,6 @@ import { Module } from "Module";
 import { ChatChannel, ChatService, EventType } from "types";
 
 const Players = game.GetService("Players");
-const ChatServiceModule = game
-  .GetService("ServerScriptService")
-  ?.WaitForChild("ChatServiceRunner", 10)
-  ?.WaitForChild("ChatService", 10) as ModuleScript | undefined;
-const ChatService = ChatServiceModule ? require(ChatServiceModule) as ChatService : undefined;
 const TextChatService = game.GetService("TextChatService");
 
 export enum ModerationType {
@@ -84,6 +79,7 @@ export default class Moderation extends Module<{
   private playersMutedUntil: Record<number, number> = {};
   private lastNotifiedMuted: Record<number, number> = {};
   private systemMessageEvent: RemoteEvent<(data: string) => void>;
+  private ChatService: ChatService | undefined;
 
   // private autoModEnabled = false;
   // private autoModTime = 0;
@@ -170,12 +166,32 @@ export default class Moderation extends Module<{
     })
   }
 
+  chatService() {
+    if (this.ChatService) return this.ChatService;
+
+    const ChatServiceModule = game
+      .GetService("ServerScriptService")
+      ?.WaitForChild("ChatServiceRunner", 10)
+      ?.WaitForChild("ChatService", 10) as ModuleScript | undefined;
+    const ChatService = ChatServiceModule ? require(ChatServiceModule) as ChatService : undefined;
+
+    if (!ChatService) {
+      this.logger.warn("ChatService not found");
+      return undefined;
+    }
+
+    this.ChatService = ChatService;
+
+    return ChatService;
+  }
+
   kick(player: Player, reason?: string) {
     this.logger.info(`Kicking ${player.Name} for ${reason}`);
     player.Kick(reason);
   }
 
   private muteLegacy(player: Player, seconds?: number, reason?: string) {
+    const ChatService = this.chatService()
     if (!ChatService) return;
 
     const speaker = ChatService.GetSpeaker(player.Name);
@@ -256,6 +272,7 @@ export default class Moderation extends Module<{
   }
 
   private unmuteLegacy(player: Player, reason?: string) {
+    const ChatService = this.chatService()
     if (!ChatService) return;
 
     const speaker = ChatService.GetSpeaker(player.Name);

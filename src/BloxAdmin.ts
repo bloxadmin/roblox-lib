@@ -1,17 +1,39 @@
 const startedAt = os.clock();
+const importTims: Record<string, number> = {};
+let importStart = os.clock();
+function importTime(name: string) {
+  const took = os.clock() - importStart;
+  importTims[name] = took;
+  importStart = os.clock();
+  return took;
+}
 import EventEmitter from "EventEmitter";
+importTime("EventEmitter");
 import Logger from "Logger";
+importTime("Logger");
 import { Module } from "Module";
+importTime("Module");
 import RemoteMessaging from "RemoteMessaging";
+importTime("RemoteMessaging");
 import { DEFAULT_CONFIG } from "consts";
+importTime("consts");
 import Actions from "modules/Actions";
+importTime("Actions");
 import Analytics from "modules/Analytics";
+importTime("Analytics");
 import DebugUI from "modules/DebugUI";
+importTime("DebugUI");
 import Metrics from "modules/Metrics";
+importTime("Metrics");
 import Moderation from "modules/Moderation";
+importTime("Moderation");
 import RemoteConfig from "modules/RemoteConfig";
+importTime("RemoteConfig");
 import Shutdown from "modules/Shutdown";
+importTime("Shutdown");
 import { Config, EventType, InitConfig } from "types";
+importTime("types");
+const importsTook = os.clock() - startedAt;
 
 export type InitBloxAdmin = (apiKey?: string, config?: InitConfig) => BloxAdmin;
 
@@ -299,6 +321,7 @@ export default function init(apiKey?: string, config: InitConfig = {}) {
 
     if (g.bloxadmin) {
       ba = g.bloxadmin;
+      ba.logger.debug(`Updating config`);
       ba.updateConfig(config);
     } else {
       const started = os.clock();
@@ -306,14 +329,13 @@ export default function init(apiKey?: string, config: InitConfig = {}) {
       g.bloxadmin = ba;
 
       ba.logger.debug(`Initialized in ${os.clock() - started}s`);
+      ba.logger.debug(`Imports in ${importsTook}s`);
+      print(importTims)
       ba.logger.debug(`Loaded in ${os.clock() - startedAt}s`);
     }
 
     if (apiKey) {
-      const start = coroutine.create(() => {
-        ba.start(apiKey);
-      });
-      coroutine.resume(start);
+      ba.start(apiKey);
     }
 
     return ba;
