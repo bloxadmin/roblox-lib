@@ -1,6 +1,6 @@
 {
   "serveAddress": "0.0.0.0",
-  "name": "bloxadmin-sdk",
+  "name": "BloxAdminSdk",
   "globIgnorePaths": [
     "**/package.json",
     "**/tsconfig.json"
