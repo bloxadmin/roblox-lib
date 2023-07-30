@@ -6,35 +6,20 @@
     "**/tsconfig.json"
   ],
   "tree": {
-    "$className": "DataModel",
-    "Workspace": {
-      "$className": "Workspace",
-      "$properties": {
-        "FilteringEnabled": true
-      }
-    },
-    "ReplicatedStorage": {
-      "$className": "ReplicatedStorage",
-      "MainModule": {
-        "$path": "out",
-        "include": {
-          "$path": "include",
-          "node_modules": {
-            "$path": "node_modules/@rbxts"
-          }
-        },
-        "Version": {
-          "$className": "StringValue",
-          "$properties": {
-            "Value": "v1.122.1"
-          }
+    "$path": "out",
+    "include": {
+      "$path": "include",
+      "node_modules": {
+        "$className": "Folder",
+        "@rbxts": {
+          "$path": "node_modules/@rbxts"
         }
       }
     },
-    "HttpService": {
-      "$className": "HttpService",
+    "Version": {
+      "$className": "StringValue",
       "$properties": {
-        "HttpEnabled": true
+        "Value": "v1.122.3"
       }
     }
   }
