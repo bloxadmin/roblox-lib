@@ -25,7 +25,7 @@ jobs:
       - uses: fabasoad/data-format-converter-action@main
         id: yaml2json
         with:
-          input: "docker-compose.yml"
+          input: "bloxadmin-sdk.rbxmx"
           from: "yaml"
           to: "json"
 
