@@ -30,7 +30,7 @@ jobs:
           to: "json"
 
       - name: Print result
-        run: echo "${{ steps.yaml2json.outputs.output }} > bloxadmin-sdk.json"
+        run: echo '${{ steps.yaml2json.outputs.output }}' > bloxadmin-sdk.json
 
       - name: Release
         uses: softprops/action-gh-release@v1
