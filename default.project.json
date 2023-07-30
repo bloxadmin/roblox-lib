@@ -19,7 +19,7 @@
     "Version": {
       "$className": "StringValue",
       "$properties": {
-        "Value": "v1.122.3"
+        "Value": "v1.122.4"
       }
     }
   }
