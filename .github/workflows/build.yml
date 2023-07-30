@@ -26,7 +26,7 @@ jobs:
         id: yaml2json
         with:
           input: "bloxadmin-sdk.rbxmx"
-          from: "yaml"
+          from: "xml"
           to: "json"
 
       - uses: "finnp/create-file-action@master"
