@@ -29,8 +29,11 @@ jobs:
           from: "xml"
           to: "json"
 
-      - name: Print result
-        run: echo '${{ steps.yaml2json.outputs.output }}' > bloxadmin-sdk.json
+      - uses: 1arp/create-a-file-action@0.2
+        with:
+          path: "."
+          file: "bloxadmin-sdk.json"
+          content: ${{ steps.yaml2json.outputs.output }}
 
       - name: Release
         uses: softprops/action-gh-release@v1
