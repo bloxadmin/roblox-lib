@@ -221,7 +221,7 @@ export default class Analytics extends Module {
       {
         // Players
         onlineCount: Players.GetPlayers().size(),
-        players: (Players.GetChildren() as Player[]).map((p) => ({
+        players: (Players.GetPlayers() as Player[]).map((p) => ({
           id: p.UserId,
           name: p.Name,
           joinedAt: this.playerJoinTimes[p.UserId],
