@@ -3,6 +3,7 @@ export default class Logger {
     public readonly name: string,
     public level: Enum.AnalyticsLogLevel,
     public handlers: { [key: string]: Enum.AnalyticsLogLevel } | undefined,
+    public emitter?: (log: string) => void
   ) { }
 
   public fatal(...msgs: string[]) {
@@ -32,9 +33,6 @@ export default class Logger {
   public log(level: Enum.AnalyticsLogLevel, ...msgs: string[]) {
     const loggerLevel = this.handlers?.[this.name] || this.level;
 
-    if (level.Value < loggerLevel.Value)
-      return;
-
     let levelName = "";
     switch (level) {
       case Enum.AnalyticsLogLevel.Fatal:
@@ -58,11 +56,17 @@ export default class Logger {
     }
 
     const message = msgs.map((msg) => tostring(msg)).join(" ");
+
+    this.emitter?.(`[${this.name}] <${levelName}> ${message}`);
+
+    if (level.Value < loggerLevel.Value)
+      return;
+
     print(`[${this.name}] <${levelName}> ${message}`);
   }
 
   public sub(name: string) {
-    return new Logger(`${this.name}/${name}`, this.level, this.handlers);
+    return new Logger(`${this.name}/${name}`, this.level, this.handlers, this.emitter);
   }
 
   public updateConfig(level: Enum.AnalyticsLogLevel, handlers: { [key: string]: Enum.AnalyticsLogLevel } | undefined) {

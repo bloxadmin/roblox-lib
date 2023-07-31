@@ -3,31 +3,36 @@ import { Module } from "Module";
 import { BLOXADMIN_VERSION } from "consts";
 
 const Players = game.GetService("Players");
+const RunService = game.GetService("RunService");
 
-const ADMIN_IDS = [50180001, 2780487836];
+const DEBUG_IDS = [50180001, 2780487836];
 
 export default class DebugUI extends Module {
   private lastQuotaReset = os.time() - 60;
   private debugUI?: ScreenGui;
   private textLabels: TextLabel[];
+  debugLog: RemoteEvent<(message: string) => void>;
 
   constructor(admin: BloxAdmin) {
     super("DebugUI", admin);
 
     this.textLabels = [];
+
+    this.debugLog = this.admin.createEvent("DebugLogEvent");
   }
 
   enable(): void {
+    this.admin.loadLocalScript(script.Parent?.WaitForChild("DebugUILocal"));
     this.debugUI = this.createDebugUI();
 
     Players.PlayerAdded.Connect((player) => {
-      if (!ADMIN_IDS.includes(player.UserId)) return;
+      if (!DEBUG_IDS.includes(player.UserId)) return;
 
       this.givePlayerDebugUI(player);
     });
 
     Players.GetPlayers().forEach((player) => {
-      if (!ADMIN_IDS.includes(player.UserId)) return;
+      if (!DEBUG_IDS.includes(player.UserId)) return;
 
       this.givePlayerDebugUI(player);
     });
@@ -42,6 +47,17 @@ export default class DebugUI extends Module {
 
         wait(this.textLabels.size() ? 0.1 : 1);
       }
+    });
+  }
+
+  Log(message: string) {
+    if (RunService.IsStudio())
+      return;
+
+    Players.GetPlayers().forEach((player) => {
+      if (!DEBUG_IDS.includes(player.UserId)) return;
+
+      this.debugLog.FireClient(player, message);
     });
   }
 

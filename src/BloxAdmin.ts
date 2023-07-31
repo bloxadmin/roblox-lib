@@ -104,6 +104,9 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
       this.config.api.loggingLevel ||
       (RunService.IsStudio() ? Enum.AnalyticsLogLevel.Information : Enum.AnalyticsLogLevel.Warning),
       this.config.api.loggingHandlers,
+      (message) => {
+        this.GetService("DebugUI")?.Log(message);
+      }
     );
     if (!this.config.api.loggingLevel && RunService.IsStudio()) {
       this.logger.info(
@@ -131,12 +134,12 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.logger.verbose("Loading config:", tostring(this.config));
 
     const loadStart = os.clock();
+    this.loadModule(() => new DebugUI(this));
     this.loadModule(() => new Analytics(this));
     this.loadModule(() => new RemoteConfig(this));
     this.loadModule(() => new Shutdown(this));
     this.loadModule(() => new Moderation(this));
     this.loadModule(() => new Actions(this));
-    this.loadModule(() => new DebugUI(this));
     this.loadModule(() => new Metrics(this));
     this.logger.debug(`Loaded modules in ${os.clock() - loadStart}s`);
 
@@ -330,7 +333,6 @@ export default function init(apiKey?: string, config: InitConfig = {}) {
 
       ba.logger.debug(`Initialized in ${os.clock() - started}s`);
       ba.logger.debug(`Imports in ${importsTook}s`);
-      print(importTims)
       ba.logger.debug(`Loaded in ${os.clock() - startedAt}s`);
     }
 
