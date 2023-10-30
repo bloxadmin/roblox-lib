@@ -302,23 +302,28 @@ export default class Analytics extends Module {
   sendScriptErrorEvent(data: ScriptErrorData, player?: Player) {
     if (this.eventDisallowed("scriptError", ["auto"])) return;
 
-    let segments = player ? this.getPlayerSegments(player) : {};
+    const segments = player ? this.getPlayerSegments(player) : {};
 
-    if (player) {
-      data.message = data.message.gsub(player.Name, "PlayerName")[0]
-      data.stack = data.stack.gsub(player.Name, "PlayerName")[0]
+    
+    Players.GetPlayers().forEach((plr) => {
+      data.message = data.message.gsub(plr.Name, "PlayerName")[0];
+      data.stack = data.stack.gsub(plr.Name, "PlayerName")[0];
+      data.message = data.message.gsub(plr.UserId, "PlayerId")[0];
+      data.stack = data.stack.gsub(plr.UserId, "PlayerId")[0];
 
-      if (data.script)
-        data.script = data.script.gsub(player.Name, "PlayerName")[0]
-    }
+      if (data.script) {
+        data.script = data.script.gsub(plr.Name, "PlayerName")[0];
+        data.script = data.script.gsub(plr.UserId, "PlayerId")[0];
+      }
+    });
 
     this.send("scriptError", segments, {
       error: data,
       occurence: {
         placeId: game.PlaceId,
         placeVersion: game.PlaceVersion,
-        playerId: player ? player.UserId : undefined
-      }
+        playerId: player ? player.UserId : undefined,
+      },
     });
   }
 
