@@ -26,6 +26,7 @@ importTime("DebugUI");
 import Metrics from "modules/Metrics";
 importTime("Metrics");
 import Moderation from "modules/Moderation";
+import PromoCodes from "modules/PromoCodes";
 importTime("Moderation");
 import RemoteConfig from "modules/RemoteConfig";
 importTime("RemoteConfig");
@@ -141,6 +142,7 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.loadModule(() => new Moderation(this));
     this.loadModule(() => new Actions(this));
     this.loadModule(() => new Metrics(this));
+    this.loadModule(() => new PromoCodes(this));
     this.logger.debug(`Loaded modules in ${os.clock() - loadStart}s`);
 
     this.messenger.on("message", (message) => {

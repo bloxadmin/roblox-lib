@@ -165,6 +165,15 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
     });
   }
 
+  public put(url: string, body: unknown) {
+    return HttpService.RequestAsync({
+      Method: "PUT",
+      Headers: this.reqHeaders(),
+      Url: url,
+      Body: HttpService.JSONEncode(body),
+    });
+  }
+
   public async setup(): Promise<void> {
     const result = this.get(this.url);
 

@@ -115,10 +115,10 @@ export default class Moderation extends Module<{
 
       switch (moderationType) {
         case ModerationType.Kick:
-          this.kick(player, reason);
+          this._kick(player, reason);
           break;
         case ModerationType.Mute:
-          this.mute(player, untilTime, reason, realDuration);
+          this._mute(player, untilTime, reason, realDuration);
           break;
         case ModerationType.Unmute:
           this.unmute(player, reason);
@@ -161,7 +161,7 @@ export default class Moderation extends Module<{
 
     spawn(() => {
       delay(1, () => {
-        this.unmuteCheck(true)
+        this._unmuteCheck(true)
       });
     })
   }
@@ -185,12 +185,12 @@ export default class Moderation extends Module<{
     return ChatService;
   }
 
-  kick(player: Player, reason?: string) {
+  private _kick(player: Player, reason?: string) {
     this.logger.info(`Kicking ${player.Name} for ${reason}`);
     player.Kick(reason);
   }
 
-  private muteLegacy(player: Player, seconds?: number, reason?: string) {
+  private _muteLegacy(player: Player, seconds?: number, reason?: string) {
     const ChatService = this.chatService()
     if (!ChatService) return;
 
@@ -209,7 +209,7 @@ export default class Moderation extends Module<{
 
   // Chat 
 
-  unmuteCheck(loop = false) {
+  private _unmuteCheck(loop = false) {
     for (const [playerId, untilTime] of pairs(this.playersMutedUntil)) {
       if (untilTime !== -1 && untilTime < os.time()) {
         const player = Players.GetPlayerByUserId(playerId);
@@ -220,11 +220,11 @@ export default class Moderation extends Module<{
 
     if (loop)
       delay(1, () => {
-        this.unmuteCheck(true)
+        this._unmuteCheck(true)
       });
   }
 
-  isPlayerMuted(player: Player | number) {
+  private _isPlayerMuted(player: Player | number) {
     const playerId = typeIs(player, "number") ? player : player.UserId;
     return this.playersMutedUntil[playerId] && (this.playersMutedUntil[playerId] === -1 || this.playersMutedUntil[playerId] > os.time());
   }
@@ -237,7 +237,7 @@ export default class Moderation extends Module<{
       const player = Players.GetPlayerByUserId(playerId);
       if (!player) return true;
 
-      const isMuted = this.isPlayerMuted(player);
+      const isMuted = this._isPlayerMuted(player);
 
       if (isMuted && (!this.lastNotifiedMuted[playerId] || this.lastNotifiedMuted[playerId] + NOTIFICATION_COOLDOWN < os.time())) {
         this.lastNotifiedMuted[playerId] = os.time();
@@ -245,7 +245,7 @@ export default class Moderation extends Module<{
       } else if (!isMuted && message.TextChannel && message.TextChannel.Name.sub(1, 10) === "RBXWhisper") {
         const destinationPlayer = Players.GetPlayerByUserId(destination.UserId);
         if (destinationPlayer) {
-          const destinationIsMuted = this.isPlayerMuted(destinationPlayer);
+          const destinationIsMuted = this._isPlayerMuted(destinationPlayer);
 
           if (destinationIsMuted) {
             this.systemMessageEvent.FireClient(player, "The player you are trying to whisper is muted and cannot respond.");
@@ -257,14 +257,14 @@ export default class Moderation extends Module<{
     }
   }
 
-  mute(player: Player, untilTime?: number, reason?: string, realDuration?: number) {
+  private _mute(player: Player, untilTime?: number, reason?: string, realDuration?: number) {
     this.logger.info(`Muting ${player.Name} for ${reason} until ${untilTime}`);
     this.playersMutedUntil[player.UserId] = untilTime || -1;
 
     const seconds = untilTime ? untilTime - os.time() : undefined;
 
     if (TextChatService.ChatVersion === Enum.ChatVersion.LegacyChatService) {
-      this.muteLegacy(player, seconds, reason);
+      this._muteLegacy(player, seconds, reason);
       return;
     }
     const r = reason ? ` for ${reason}` : "";
