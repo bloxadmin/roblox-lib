@@ -1,299 +1,210 @@
-import { BloxAdmin } from "BloxAdmin";
 import { Module } from "Module";
-import { ChatChannel, ChatService, EventType } from "types";
+import { BloxAdmin } from "BloxAdmin";
+import { EventType } from "types";
+import Datastore from "Datastore";
+import { Players } from "@rbxts/services";
 
-const Players = game.GetService("Players");
-const TextChatService = game.GetService("TextChatService");
+type Plr = Player | number;
+type Invoker = Player | number | undefined;
+type Reason = string | undefined;
+type Duration = number | undefined;
 
-export enum ModerationType {
-  Kick = "kick",
-  Mute = "mute",
-  Unmute = "unmute",
-}
-
-const NOTIFICATION_COOLDOWN = 5;
-const TIME_UNITS = {
-  "s": 1,
-  "m": 60,
-  "h": 60 * 60,
-  "d": 60 * 60 * 24,
-  "w": 60 * 60 * 24 * 7,
-  "mo": 60 * 60 * 24 * 30,
-  "y": 60 * 60 * 24 * 365,
-  "kys": 60 * 60 * 24 * 365 * 1000,
+type Events = {
+  Report: [Plr, Invoker, Reason],
+  Warn: [Plr, Invoker, Reason],
+  Kick: [Plr, Invoker, Reason],
+  Mute: [Plr, Invoker, Reason, Duration],
+  Unmute: [Plr, Invoker, Reason]
+  Ban: [Plr, Invoker, Reason, Duration],
+  Unban: [Plr, Invoker, Reason],
 };
-const TIME_UNITS_NAMES: [string, number][] = [
-  ["kiloyears", TIME_UNITS.kys],
-  ["years", TIME_UNITS.y],
-  ["days", TIME_UNITS.d],
-  ["hours", TIME_UNITS.h],
-  ["minutes", TIME_UNITS.m],
-  ["seconds", TIME_UNITS.s],
-];
 
-function secondsToHuman(seconds: number) {
-  const parts: string[] = [];
+type ModerationDatastore = Partial<{ [Key in "muted" | "banned" ]: { reason: Reason, expiry: number } }>;
 
-  for (const [unit, secondsInUnit] of TIME_UNITS_NAMES) {
-    const count = math.floor(seconds / secondsInUnit);
-    if (count > 0) {
-      if (count === 1) {
-        parts.push(`${count} ${unit.sub(1, -2)}`);
-      } else {
-        parts.push(`${count} ${unit}`);
-      }
-      seconds -= count * secondsInUnit;
-    }
-  }
-
-  if (parts.size() > 1) {
-    // add "and" before last part
-    parts[parts.size() - 1] = `and ${parts[parts.size() - 1]}`;
-  }
-
-  return parts.join(" ");
-}
-
-function getAllTextChannels(): TextChannel[] {
-  if (TextChatService.ChatVersion !== Enum.ChatVersion.TextChatService) return [];
-
-  const instances = TextChatService.WaitForChild("TextChannels", 10)?.GetChildren();
-  const channels: TextChannel[] = [];
-
-  instances?.filter((instance) => instance.IsA("TextChannel")).forEach((instance) => {
-    const channel = instance as TextChannel;
-    channels.push(channel);
-  });
-
-  return channels;
-}
-
-
-export default class Moderation extends Module<{
-  kick: [Player, string];
-  ban: [Player, number, string];
-  unban: [Player, string];
-  mute: [Player, number, string];
-  unmute: [Player, string];
-}> {
-  private playersMutedUntil: Record<number, number> = {};
-  private lastNotifiedMuted: Record<number, number> = {};
-  private systemMessageEvent: RemoteEvent<(data: string) => void>;
-  private ChatService: ChatService | undefined;
-
-  // private autoModEnabled = false;
-  // private autoModTime = 0;
-  // private autoModBadWords: string[] = [];
+export default class Moderation extends Module<Events> {
+  private datastore: Datastore;
+  private dispatch: boolean = true;
+  private mutes: Map<number, number>;
 
   constructor(admin: BloxAdmin) {
     super("Moderation", admin);
 
-    this.systemMessageEvent = this.admin.createEvent("ModerationSystemMessageEvent");
-  }
+    this.datastore = new Datastore("bloxadmin/moderation", {
+      exponential: true,
+      attempts: 5,
+      delay: 5
+    });
 
-  enable(): void {
-    this.admin.loadLocalScript(script.Parent?.WaitForChild("ModerationLocal"));
+    this.mutes = new Map();
+  };
 
+  enable() {
     this.admin.messenger.on("message", (data) => {
-      const [eventType, moderationType, playerId, untilTime, reason, realDuration] = data as [
-        EventType,
-        ModerationType,
-        number,
-        number | undefined,
-        string | undefined,
-        number | undefined,
-      ];
-      if (eventType !== EventType.Moderation) return;
-      if (!moderationType) return;
+      const [eventType, action, plrIdId, invoker, reason, duration] = data as [EventType, keyof Events, Plr, Invoker, Reason, Duration];
 
-      const player = Players.GetPlayerByUserId(playerId);
+      if (eventType === EventType.Moderation && action && this[action]) {
+        this.dispatch = false;
 
-      if (!player) {
-        this.logger.warn(`Player ${playerId} not found when trying to ${moderationType}`);
-        return;
-      }
-
-      switch (moderationType) {
-        case ModerationType.Kick:
-          this._kick(player, reason);
-          break;
-        case ModerationType.Mute:
-          this._mute(player, untilTime, reason, realDuration);
-          break;
-        case ModerationType.Unmute:
-          this.unmute(player, reason);
-          break;
-      }
+        this[action](plrIdId, invoker, reason, duration);
+      };
     });
 
-    getAllTextChannels().forEach((channel) => {
-      this.configureChannel(channel);
+    for (const plr of Players.GetPlayers()) {
+      this.check(plr);
+    };
+
+    Players.PlayerAdded.Connect((player) => {
+      this.check(player);
     });
 
-    TextChatService.WaitForChild("TextChannels", 10)?.ChildAdded.Connect((channel) => {
-      if (!channel.IsA("TextChannel")) return;
-      this.configureChannel(channel);
+    Players.PlayerRemoving.Connect((player) => {
+      this.mutes.has(player.UserId) && this.mutes.delete(player.UserId);
     });
 
-    // const remoteConfig = this.admin.GetService("RemoteConfig");
+    task.spawn(() => {
+      this.lifecycle(true)
+    });
+  };
 
-    // remoteConfig.watch<boolean>("$chat.automod", (data) => {
-    //   this.autoModEnabled = data;
-    //   this.logger.debug(`Auto mod enabled: ${data}`);
-    // });
-    // remoteConfig.watch<string>("$chat.automod.time", (data) => {
-    //   // format: 1s 1m 1mo 1y 1kys
-    //   const time = tonumber(data.gsub("[^%d]", "")[0]) || 0;
-    //   const unit = data.lower().gsub("[^%a]", "")[0] as keyof typeof TIME_UNITS;
+  public Report(plr: Plr, invoker: Invoker, reason: Reason) {
+    this.dispatcher("Report", plr, invoker, reason);
+  };
 
-    //   if (!time || !unit || !TIME_UNITS[unit]) {
-    //     this.logger.warn(`Invalid auto mod time: ${data}`);
-    //     return;
-    //   }
+  public Warn(plr: Plr, invoker: Invoker, reason: Reason) {
+    this.dispatcher("Warn", plr, invoker, reason);
+  };
 
-    //   this.autoModTime = time * TIME_UNITS[unit];
-    //   this.logger.debug(`Auto mod time: ${this.autoModTime}`);
-    // });
-    // remoteConfig.watch<string[]>("$chat.automod.phrases", (data) => {
-    //   this.autoModBadWords = data;
-    //   this.logger.debug(`Auto mod bad words: ${data.join(', ')}`);
-    // });
+  public Kick(plr: Plr, invoker: Invoker, reason?: string) {
+    const player = typeIs(plr, "number") ? Players.GetPlayerByUserId(plr) : plr;
 
-    spawn(() => {
-      delay(1, () => {
-        this._unmuteCheck(true)
+    if (player) {
+      if (this.admin.config.moderation.kick) {
+        player.Kick(reason);
+      };
+
+      this.dispatcher("Kick", plr, invoker, reason);
+    };
+  };
+
+  public Mute(plr: Plr, invoker: Invoker, reason: Reason, duration: Duration) {
+    const id = tostring(plr);
+    const expiry = duration ? os.time() + duration : -1;
+
+    this.datastore.update<ModerationDatastore>(id, (old) => {
+      return { ...old, muted: { reason, expiry } };
+    });
+
+    this.dispatcher("Mute", plr, invoker, reason, duration);
+  };
+
+  public Unmute(plr: Plr, invoker: Invoker, reason: Reason) {
+    const player = typeIs(plr, "number") ? Players.GetPlayerByUserId(plr) : plr;
+    const id = tostring(plr);
+
+    this.datastore.update<ModerationDatastore>(id, (old) => {
+      if (old && old.muted) {
+        delete old.muted;
+      };
+
+      return { ...old };
+    });
+
+    if (player) {
+      this.mutes.delete(player.UserId);
+    };
+
+    this.dispatcher("Unmute", plr, invoker, reason);
+  };
+
+  public Ban(plr: Plr, invoker: Invoker, reason: Reason, duration: Duration) {
+    const id = tostring(typeIs(plr, "number") ? plr : plr.UserId);
+    const expiry = duration ? os.time() + duration : -1;
+
+    this.datastore.update<ModerationDatastore>(id, (old) => {
+      return { ...old, banned: { reason, expiry } };
+    });
+
+    const player = typeIs(plr, "number") ? Players.GetPlayerByUserId(plr) : plr;
+
+    if (player) {
+      if (this.admin.config.moderation.kick) {
+        player.Kick(reason);
+      };
+    }
+
+    this.dispatcher("Ban", plr, invoker, reason, duration);
+  };
+
+  public Unban(plr: Plr, invoker: Invoker, reason: Reason) {
+    const id = tostring(typeIs(plr, "number") ? plr : plr.UserId);
+
+    this.datastore.update<ModerationDatastore>(id, (old) => {
+      if (old && old.banned) {
+        delete old.banned;
+      };
+
+      return { ...old };
+    });
+
+    this.dispatcher("Unban", plr, invoker, reason);
+  };
+
+  private check(plr: Player) {
+    const id = tostring(plr.UserId);
+    const result = this.datastore.get<ModerationDatastore>(id);
+
+    if (result) {
+      if (result.banned && result.banned.expiry > os.time() ) {
+        if (this.admin.config.)
+        plr.Kick(result.banned.reason);
+      } else {
+        this.Unban(plr.UserId, undefined, "Ban expired.");
+      };
+
+      if (result.muted && result.muted.expiry > os.time()) {
+        if (result.muted.expiry > 0) {
+          this.mutes.set(plr.UserId, result.muted.expiry);
+        };
+      } else {
+        this.Unmute(plr.UserId, undefined, "Mute expired.");
+      };
+    };
+  };
+
+  private lifecycle = (loop = true) => {
+    for (const [plrId, expiry] of pairs(this.mutes)) {
+      if (expiry < os.time()) {
+        this.Unmute(plrId, undefined, "Mute expired.");
+      };
+    };
+
+    if (loop) {
+      task.delay(1, () => {
+        this.lifecycle(true);
       });
-    })
-  }
+    };
+  };
 
-  chatService() {
-    if (this.ChatService) return this.ChatService;
+  private dispatcher<Action extends keyof Events>(action: Action, ...args: Events[Action]) {
+    const [plr, invoker, reason, duration] = args;
 
-    const ChatServiceModule = game
-      .GetService("ServerScriptService")
-      ?.WaitForChild("ChatServiceRunner", 10)
-      ?.WaitForChild("ChatService", 10) as ModuleScript | undefined;
-    const ChatService = ChatServiceModule ? require(ChatServiceModule) as ChatService : undefined;
+    const playerId = typeIs(plr, "number") ? plr : plr.UserId;
 
-    if (!ChatService) {
-      this.logger.warn("ChatService not found");
-      return undefined;
-    }
+    if (this.dispatch) {
+      const gameId = game.GameId;
 
-    this.ChatService = ChatService;
+      const url = `${this.admin.config.api.base}/games/${gameId}/players/${playerId}/moderation`;
 
-    return ChatService;
-  }
-
-  private _kick(player: Player, reason?: string) {
-    this.logger.info(`Kicking ${player.Name} for ${reason}`);
-    player.Kick(reason);
-  }
-
-  private _muteLegacy(player: Player, seconds?: number, reason?: string) {
-    const ChatService = this.chatService()
-    if (!ChatService) return;
-
-    const speaker = ChatService.GetSpeaker(player.Name);
-    const r = reason ? ` for ${reason}` : "";
-
-    speaker?.GetChannelList()?.forEach((channelName) => {
-      const channel = ChatService.GetChannel(channelName);
-      channel?.MuteSpeaker(speaker.Name, undefined, seconds);
-    });
-    speaker?.SendSystemMessage(
-      seconds ? `You have been muted for ${secondsToHuman(seconds)}${r}` : `You have been muted${r}`,
-      "System",
-    );
-  }
-
-  // Chat 
-
-  private _unmuteCheck(loop = false) {
-    for (const [playerId, untilTime] of pairs(this.playersMutedUntil)) {
-      if (untilTime !== -1 && untilTime < os.time()) {
-        const player = Players.GetPlayerByUserId(playerId);
-        if (player)
-          this.unmute(player, "Mute expired");
-      }
-    }
-
-    if (loop)
-      delay(1, () => {
-        this._unmuteCheck(true)
+      this.admin.messenger.post(url, {
+        action: action.lower(),
+        invoker,
+        reason,
+        duration
       });
-  }
+    } else {
+      this.dispatch = true;
+    };
 
-  private _isPlayerMuted(player: Player | number) {
-    const playerId = typeIs(player, "number") ? player : player.UserId;
-    return this.playersMutedUntil[playerId] && (this.playersMutedUntil[playerId] === -1 || this.playersMutedUntil[playerId] > os.time());
-  }
-
-
-  private configureChannel(channel: TextChannel) {
-    channel.ShouldDeliverCallback = (message: TextChatMessage, destination: TextSource) => {
-      const playerId = message.TextSource?.UserId;
-      if (!playerId) return true;
-      const player = Players.GetPlayerByUserId(playerId);
-      if (!player) return true;
-
-      const isMuted = this._isPlayerMuted(player);
-
-      if (isMuted && (!this.lastNotifiedMuted[playerId] || this.lastNotifiedMuted[playerId] + NOTIFICATION_COOLDOWN < os.time())) {
-        this.lastNotifiedMuted[playerId] = os.time();
-        this.systemMessageEvent.FireClient(player, "You are muted and your messages will not be seen by others.");
-      } else if (!isMuted && message.TextChannel && message.TextChannel.Name.sub(1, 10) === "RBXWhisper") {
-        const destinationPlayer = Players.GetPlayerByUserId(destination.UserId);
-        if (destinationPlayer) {
-          const destinationIsMuted = this._isPlayerMuted(destinationPlayer);
-
-          if (destinationIsMuted) {
-            this.systemMessageEvent.FireClient(player, "The player you are trying to whisper is muted and cannot respond.");
-          }
-        }
-      }
-
-      return !isMuted;
-    }
-  }
-
-  private _mute(player: Player, untilTime?: number, reason?: string, realDuration?: number) {
-    this.logger.info(`Muting ${player.Name} for ${reason} until ${untilTime}`);
-    this.playersMutedUntil[player.UserId] = untilTime || -1;
-
-    const seconds = untilTime ? untilTime - os.time() : undefined;
-
-    if (TextChatService.ChatVersion === Enum.ChatVersion.LegacyChatService) {
-      this._muteLegacy(player, seconds, reason);
-      return;
-    }
-    const r = reason ? ` for ${reason}` : "";
-    this.systemMessageEvent.FireClient(player, seconds ? `You have been muted for ${secondsToHuman(realDuration || seconds)}${r}` : `You have been muted${r}`,);
-  }
-
-  private unmuteLegacy(player: Player, reason?: string) {
-    const ChatService = this.chatService()
-    if (!ChatService) return;
-
-    const speaker = ChatService.GetSpeaker(player.Name);
-    speaker?.GetChannelList()?.forEach((channelName) => {
-      const channel = ChatService.GetChannel(channelName);
-      if (!channel || !channel.IsSpeakerMuted(speaker.Name)) return;
-
-      channel.UnmuteSpeaker(speaker.Name);
-    });
-    speaker?.SendSystemMessage("You have been unmuted.", "System");
-  }
-
-  unmute(player: Player, reason?: string) {
-    this.logger.info(`Unmuting ${player.Name} for ${reason}`);
-    delete this.playersMutedUntil[player.UserId];
-
-    if (TextChatService.ChatVersion === Enum.ChatVersion.LegacyChatService) {
-      this.unmuteLegacy(player, reason);
-      return;
-    }
-
-    this.systemMessageEvent.FireClient(player, "You have been unmuted.");
-  }
-}
+    this.emit(action, ...args);
+  };
+};

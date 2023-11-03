@@ -32,4 +32,9 @@ export const DEFAULT_CONFIG: Config = {
     playerPositions: 0,
     stats: 13,
   },
+  moderation: {
+    kick: true,
+    mute: true,
+    ban: true
+  }
 };

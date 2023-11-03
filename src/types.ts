@@ -53,12 +53,18 @@ export interface Config {
     playerPositions: number;
     playerCursors: number;
   };
+  moderation: {
+    kick: boolean,
+    mute: boolean,
+    ban: boolean
+  }
 }
 
 export interface InitConfig {
   api?: Partial<Config["api"]>;
   events?: Partial<Config["events"]>;
   intervals?: Partial<Config["intervals"]>;
+  moderation?: Partial<Config["moderation"]>;
 }
 
 export enum EventType {

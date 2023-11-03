@@ -91,6 +91,10 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
           ...DEFAULT_CONFIG.intervals,
           ...(config.intervals || {}),
         },
+        moderation: {
+          ...DEFAULT_CONFIG.moderation,
+          ...(config.moderation || {})
+        }
       }
       : DEFAULT_CONFIG;
     this.sessionIds = {};
@@ -178,6 +182,10 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
         ...this.config.intervals,
         ...(config.intervals || {}),
       },
+      moderation: {
+        ...this.config.moderation,
+        ...(config.moderation || {})
+      }
     };
 
     this.logger.updateConfig(this.config.api.loggingLevel, this.config.api.loggingHandlers);
