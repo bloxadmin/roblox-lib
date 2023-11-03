@@ -2,6 +2,7 @@ import { BloxAdmin } from "BloxAdmin";
 import { Module } from "Module";
 
 const HttpService = game.GetService("HttpService");
+const Players = game.GetService("Players");
 
 export interface CreatePromoCode {
   attributes: Record<string, unknown>;
@@ -18,7 +19,9 @@ export interface PromoCode extends CreatePromoCode {
 }
 
 
-export default class PromoCodes extends Module {
+export default class PromoCodes extends Module<{ "codeClaimed": [Player, string, PromoCode] }> {
+  public CodeClaimed = this.getSignal("codeClaimed");
+
   constructor(admin: BloxAdmin) {
     super("PromoCodes", admin);
   }
@@ -27,6 +30,7 @@ export default class PromoCodes extends Module {
 
   ClaimCode(player: Player | number, code: string): Promise<PromoCode> {
     return new Promise((resolve, reject) => {
+      const user = typeIs(player, "number") ? Players.GetPlayerByUserId(player) : player;
       const playerId = typeIs(player, "number") ? player : player.UserId;
 
       const url = `${this.admin.config.api.base}/games/${game.GameId}/codes/${code}/uses/${playerId}`
@@ -41,7 +45,12 @@ export default class PromoCodes extends Module {
         return reject(response.Body);
       }
 
-      return resolve(HttpService.JSONDecode(response.Body) as PromoCode);
+      const promoCode = HttpService.JSONDecode(response.Body) as PromoCode;
+
+      if (user)
+        this.emit("codeClaimed", user, code, promoCode);
+
+      return resolve(promoCode);
     });
   }
 }
