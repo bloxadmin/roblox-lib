@@ -26,6 +26,14 @@ export default class Moderation extends Module<Events> {
   private dispatch: boolean = true;
   private mutes: Map<number, number>;
 
+  public Reported = this.getSignal("Report");
+  public Warned = this.getSignal("Warn");
+  public Kicked = this.getSignal("Kick");
+  public Muted = this.getSignal("Mute");
+  public Unmuted = this.getSignal("Unmute");
+  public Banned = this.getSignal("Ban");
+  public Unbanned = this.getSignal("Unban");
+
   constructor(admin: BloxAdmin) {
     super("Moderation", admin);
 
