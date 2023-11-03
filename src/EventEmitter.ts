@@ -35,19 +35,27 @@ export class Signal<N, A extends unknown[]> {
   constructor(private name: N) { }
 
   public Connect(callback: EventCallback<A>) {
-    this.connections.push(new Connection(callback, false));
+    const conn = new Connection(callback, false);
+    this.connections.push(conn);
+    return conn;
   }
 
   public ConnectParallel(callback: EventCallback<A>) {
-    this.parallelConnections.push(new Connection(callback, false));
+    const conn = new Connection(callback, false);
+    this.parallelConnections.push(conn);
+    return conn;
   }
 
   public Once(callback: EventCallback<A>) {
-    this.connections.push(new Connection(callback, true));
+    const conn = new Connection(callback, true);
+    this.connections.push(conn);
+    return conn;
   }
 
   public OnceParallel(callback: EventCallback<A>) {
-    this.parallelConnections.push(new Connection(callback, true));
+    const conn = new Connection(callback, true);
+    this.parallelConnections.push(conn);
+    return conn;
   }
 
   private CallListener(connection: Connection<A>, ...args: A): boolean {
