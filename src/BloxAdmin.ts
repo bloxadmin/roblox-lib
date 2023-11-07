@@ -150,7 +150,11 @@ export class BloxAdmin extends EventEmitter<{ ready: [] }> {
     this.logger.debug(`Loaded modules in ${os.clock() - loadStart}s`);
 
     this.messenger.on("message", (message) => {
-      this.logger.debug(`Received message: ${HttpService.JSONEncode(message)}`);
+      this.logger.verbose(`Received message: ${HttpService.JSONEncode(message)}`);
+      const [eventType, config] = message as [EventType, InitConfig | undefined];
+      if (eventType !== EventType.ScriptConfig) return;
+
+      this.updateConfig(config);
     });
 
     // Call start on next clock cycle

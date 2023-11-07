@@ -34,15 +34,15 @@ export default class Datastore<DefaultValue> {
     });
   };
 
-  public update<Old = DefaultValue, New = Old>(key: string, transform: (old: Old | undefined, keyInfo: DataStoreKeyInfo) => [New, number[] | undefined, object | undefined]): Promise<New> {
+  public update<Old = DefaultValue, New = Old>(key: string, transform: (old: Old | undefined, keyInfo: DataStoreKeyInfo | undefined) => [New, number[] | undefined, object | undefined]): Promise<New> {
     return this.retry(() => {
       const [result] = this.datastore().UpdateAsync<Old, New>(key, (old, keyInfo) => {
         const [transformed, ids, metadata] = transform(old, keyInfo);
 
         return $tuple(
           transformed,
-          ids || keyInfo.GetUserIds() as number[] | undefined,
-          metadata || keyInfo.GetMetadata()
+          ids || keyInfo?.GetUserIds() as number[] | undefined,
+          metadata || keyInfo?.GetMetadata()
         )
       });
 

@@ -1,7 +1,7 @@
 import EventEmitter from "EventEmitter";
 import Logger from "Logger";
 import { BLOXADMIN_VERSION } from "consts";
-import { Config, InitConfig } from "types";
+import { Config, EventType, InitConfig } from "types";
 
 const HttpService = game.GetService("HttpService");
 const RunService = game.GetService("RunService");
@@ -40,6 +40,7 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
   private flushing = false;
 
   private readonly localQueue: M[];
+  public connected: boolean = false;
 
   constructor({
     name,
@@ -208,7 +209,10 @@ export default class RemoteMessaging<M extends defined> extends EventEmitter<{
 
     this.logger?.debug("Connecting to remote");
 
-    await this.setup()
+    await this.setup();
+
+    this.emit("connect");
+    this.connected = true;
 
     this.logger?.debug("Sending events to remote");
     this.listeningRemote = true;

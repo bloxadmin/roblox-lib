@@ -76,6 +76,7 @@ export enum EventType {
   Shutdown = 5,
   Chat = 6,
   Metrics = 7,
+  ScriptConfig = 8,
 }
 
 export interface ScriptErrorData {

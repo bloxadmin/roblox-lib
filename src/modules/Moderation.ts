@@ -50,13 +50,13 @@ export default class Moderation extends Module<Events> {
   private dispatch: boolean = true;
   private mutes: Map<number, number>;
 
-  public Reported = this.getSignal("Report");
-  public Warned = this.getSignal("Warn");
-  public Kicked = this.getSignal("Kick");
-  public Muted = this.getSignal("Mute");
-  public Unmuted = this.getSignal("Unmute");
-  public Banned = this.getSignal("Ban");
-  public Unbanned = this.getSignal("Unban");
+  public PlayerReported = this.getSignal("Report");
+  public PlayerWarned = this.getSignal("Warn");
+  public PlayerKicked = this.getSignal("Kick");
+  public PlayerMuted = this.getSignal("Mute");
+  public PlayerUnmuted = this.getSignal("Unmute");
+  public PlayerBanned = this.getSignal("Ban");
+  public PlayerUnbanned = this.getSignal("Unban");
 
   constructor(admin: BloxAdmin) {
     super("Moderation", admin);
@@ -85,9 +85,12 @@ export default class Moderation extends Module<Events> {
       };
     });
 
-    for (const plr of Players.GetPlayers()) {
-      this.check(plr);
-    };
+    this.admin.messenger.on('options', () => {
+      this.logger.debug("Options received, rechecking players");
+      for (const plr of Players.GetPlayers()) {
+        this.check(plr);
+      };
+    })
 
     Players.PlayerAdded.Connect((player) => {
       this.check(player);
@@ -103,9 +106,11 @@ export default class Moderation extends Module<Events> {
 
     this.admin.loadLocalScript(script.Parent?.WaitForChild("ModerationLocal"));
 
-    TextChatService.WaitForChild("TextChannels", 10)?.ChildAdded.Connect((channel) => {
-      if (!channel.IsA("TextChannel")) return;
-      this.configureChatServiceChannel(channel);
+    task.spawn(() => {
+      TextChatService.WaitForChild("TextChannels", 10)?.ChildAdded.Connect((channel) => {
+        if (!channel.IsA("TextChannel")) return;
+        this.configureChatServiceChannel(channel);
+      });
     });
 
     this.on("Mute", (player, _, reason, duration) => {
@@ -256,6 +261,8 @@ export default class Moderation extends Module<Events> {
   // * Internal APIs
 
   private async check(plr: Player) {
+    if (!this.admin.messenger.connected) return;
+
     const id = tostring(plr.UserId);
     const [result] = await this.datastore.get<ModerationDatastore>(id);
 
@@ -295,46 +302,46 @@ export default class Moderation extends Module<Events> {
   };
 
   private lifecycle = async (loop = true) => {
-    const promises: Promise<void>[] = [];
-    for (const [plrId, expiry] of pairs(this.mutes)) {
-      if (expiry < os.time()) {
-        promises.push(this.Unmute(plrId, undefined, "Mute expired."));
+    do {
+      const promises: Promise<void>[] = [];
+      for (const [plrId, expiry] of pairs(this.mutes)) {
+        if (expiry < os.time()) {
+          promises.push(this.Unmute(plrId, undefined, "Mute expired."));
+        };
       };
-    };
 
-    await Promise.allSettled(promises);
+      await Promise.allSettled(promises);
 
-    if (loop) {
-      task.delay(1, () => {
-        this.lifecycle(true);
-      });
-    };
+      await Promise.delay(1);
+    } while (loop);
   };
 
   private dispatcher<Action extends keyof Events>(action: Action, plr: Plr, invoker: Invoker, reason: Reason, duration?: number) {
     const playerId = typeIs(plr, "number") ? plr : plr.UserId;
 
+    this.logger.debug(`Dispatcher -> Action: ${action}, Player: ${plr}, Invoker ${invoker}, Reason: ${reason}, Duration: ${duration}`);
+
     if (this.dispatch) {
-      // const gameId = game.GameId;
+      const url = `${this.admin.config.api.base}/games/${game.GameId}/players/${playerId}/moderation`;
 
-      // const url = `${this.admin.config.api.base}/games/${gameId}/players/${playerId}/moderation`;
+      const result = this.admin.messenger.post(url, {
+        type: action.lower(),
+        moderator: invoker,
+        reason,
+        duration
+      });
 
-      // this.admin.messenger.post(url, {
-      //   action: action.lower(),
-      //   invoker,
-      //   reason,
-      //   duration
-      // });
+      this.logger.verbose(`Result: ${result.Success ? "Success" : "Failure"}, Body: ${result.Body}`);
     } else {
       this.dispatch = true;
     };
 
-    this.logger.debug(`Dispatcher -> Action: ${action}, Player: ${plr}, Invoker ${invoker}, Reason: ${reason}, Duration: ${duration}`);
-
     const player = typeIs(plr, "number") ? Players.GetPlayerByUserId(plr) : plr;
 
     if (player) {
-      this.emit(action, player, invoker, reason, duration);
+      const invokerId = typeIs(invoker, "number") ? invoker : invoker?.UserId;
+
+      this.emit(action, player, invokerId, reason, duration);
     }
   };
 
@@ -345,8 +352,8 @@ export default class Moderation extends Module<Events> {
 
     const ChatServiceModule = game
       .GetService("ServerScriptService")
-      ?.WaitForChild("ChatServiceRunner", 10)
-      ?.WaitForChild("ChatService", 10) as ModuleScript | undefined;
+      ?.WaitForChild("ChatServiceRunner")
+      ?.WaitForChild("ChatService") as ModuleScript | undefined;
     const ChatService = ChatServiceModule ? require(ChatServiceModule) as ChatService : undefined;
 
     if (!ChatService) {
@@ -366,18 +373,18 @@ export default class Moderation extends Module<Events> {
       const player = Players.GetPlayerByUserId(playerId);
       if (!player) return true;
 
-      const [error, isMuted] = this.IsMuted(player).await();
+      const [err, isMuted] = this.IsMuted(player).await();
 
-      if (error) return true;
+      if (err) return true;
 
       if (isMuted) {
         this.systemMessageEvent.FireClient(player, "You are muted and your messages will not be seen by others.");
       } else if (!isMuted && message.TextChannel && message.TextChannel.Name.sub(1, 10) === "RBXWhisper") {
         const destinationPlayer = Players.GetPlayerByUserId(destination.UserId);
         if (destinationPlayer) {
-          const [error, destinationIsMuted] = this.IsMuted(destinationPlayer).await();
+          const [err, destinationIsMuted] = this.IsMuted(destinationPlayer).await();
 
-          if (!error && destinationIsMuted) {
+          if (!err && destinationIsMuted) {
             this.systemMessageEvent.FireClient(player, "The player you are trying to whisper is muted and cannot respond.");
           }
         }
