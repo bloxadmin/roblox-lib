@@ -26,11 +26,11 @@ export const DEFAULT_CONFIG: Config = {
   intervals: {
     ingest: 15,
     ingestRetry: 10,
-    ingestNoopRetry: 1,
-    heartbeat: 15,
+    ingestNoopRetry: 5,
+    heartbeat: 60,
     playerCursors: 0,
     playerPositions: 0,
-    stats: 13,
+    stats: 0,
   },
   moderation: {
     kick: true,
