@@ -1,6 +1,6 @@
 import { Config } from "types";
 
-export const BLOXADMIN_VERSION = 124;
+export const BLOXADMIN_VERSION = 125;
 
 export const DEFAULT_CONFIG: Config = {
   api: {
@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: Config = {
     disablePlayerlocation: false,
     disableLocation: false,
     disableMarketplace: false,
-    disallow: [],
+    disallow: ["scriptError"],
   },
   intervals: {
     ingest: 15,

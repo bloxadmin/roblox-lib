@@ -1,6 +1,6 @@
 {
   "name": "bloxadmin-sdk",
-  "version": "1.124.0",
+  "version": "1.125.0",
   "description": "",
   "main": "src/lib.ts",
   "scripts": {
